@@ -253,12 +253,12 @@ mod tests {
     #[test]
     fn counter_and_completion_track_the_whole_network() {
         let mut passport = Passport::new("Tester");
-        assert_eq!(passport.counter(), "Visited Cities: 0 / 11");
+        assert_eq!(passport.counter(), format!("Visited Cities: 0 / {CITY_COUNT}"));
         assert!(!passport.is_complete());
         for &city in &CityId::ALL {
             passport.stamp(city);
         }
-        assert_eq!(passport.counter(), "Visited Cities: 11 / 11");
+        assert_eq!(passport.counter(), format!("Visited Cities: {CITY_COUNT} / {CITY_COUNT}"));
         assert!(passport.is_complete());
         assert!((passport.completion() - 1.0).abs() < f32::EPSILON);
         assert!(passport.unstamped().is_empty());
@@ -276,7 +276,10 @@ mod tests {
         assert!(coastal.is_complete());
         let mountain = progress.iter().find(|p| p.line == LineType::Mountain).unwrap();
         assert_eq!(mountain.stamped, 0);
-        assert_eq!(mountain.total, 5);
+        // Counted from the table rather than written down, so adding a station
+        // to a corridor does not break a test about progress.
+        assert_eq!(mountain.total, net.cities_on(LineType::Mountain).count());
+        assert!(mountain.total > 0);
     }
 
     #[test]

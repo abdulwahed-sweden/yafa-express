@@ -45,7 +45,7 @@ pub mod network;
 pub mod passport;
 pub mod ticket;
 
-pub use city::{CITY_COUNT, City, CityId, LineType};
+pub use city::{CITY_COUNT, City, CityId, Label, LabelSide, LineType};
 pub use geo::{GeoPoint, MapPoint};
 pub use journey::{Journey, JourneyConfig, JourneyEvent, Phase};
 pub use network::{Leg, Link, Network, Opening, Route, Segment, SegmentId};

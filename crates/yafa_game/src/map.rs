@@ -11,7 +11,7 @@ use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::sprite_render::ColorMaterial;
-use yafa_core::{CityId, GeoPoint, LineType, Network, Opening, coast};
+use yafa_core::{CityId, GeoPoint, Label, LabelSide, LineType, Network, Opening, coast};
 
 use crate::components::*;
 use crate::theme::{self, Fonts};
@@ -21,11 +21,11 @@ use crate::theme::{self, Fonts};
 /// Chosen so the whole network - 162 km from Akka down to Ghazzah - clears the
 /// title above it and the station board below it. The water runs off the edges,
 /// as it does on any printed sheet.
-const PX_PER_KM: f32 = 2.82;
+const PX_PER_KM: f32 = 3.6;
 /// Where the centre of the network sits on screen, in pixels. Nudged left of
 /// centre into the gap between the two columns of panels, and up to clear the
 /// station board.
-const MAP_OFFSET: Vec2 = Vec2::new(-15.0, 81.5);
+const MAP_OFFSET: Vec2 = Vec2::new(-15.0, 48.0);
 
 /// Half the gauge, in pixels: how far each running rail sits from the centre
 /// line of the track.
@@ -126,10 +126,10 @@ pub fn spawn_map(mut commands: Commands, rail: Res<Rail>, view: Res<MapView>, fo
                 Text2d::new(data.name.to_owned()),
                 fonts.sign(theme::SIGN),
                 TextColor(theme::MAP_INK),
-                // Coastal names are set out over the sea, inland names over the
-                // hills, so neither crowds the track between them.
-                label_anchor(data.line_type),
-                Transform::from_translation(label_offset(data.line_type).extend(6.0)),
+                // Placement is per-station data: at this scale no rule from
+                // the corridor alone keeps Al-Quds clear of Bayt Lahm.
+                label_anchor(data.label),
+                Transform::from_translation(label_offset(data.label).extend(6.0)),
                 Pickable::IGNORE,
             ));
     }
@@ -137,18 +137,25 @@ pub fn spawn_map(mut commands: Commands, rail: Res<Rail>, view: Res<MapView>, fo
     spawn_train(&mut commands);
 }
 
-fn label_anchor(line: LineType) -> Anchor {
-    match line {
-        LineType::Coastal => Anchor(Vec2::new(0.5, 0.0)),
-        _ => Anchor(Vec2::new(-0.5, 0.0)),
-    }
+/// Which corner of the name box is pinned to the marker.
+fn label_anchor(label: Label) -> Anchor {
+    Anchor(match label.side {
+        LabelSide::Left => Vec2::new(0.5, 0.0),
+        LabelSide::Right => Vec2::new(-0.5, 0.0),
+        LabelSide::Above => Vec2::new(0.0, -0.5),
+        LabelSide::Below => Vec2::new(0.0, 0.5),
+    })
 }
 
-fn label_offset(line: LineType) -> Vec2 {
-    match line {
-        LineType::Coastal => Vec2::new(-11.0, 0.0),
-        _ => Vec2::new(11.0, 0.0),
-    }
+/// How far the name sits from the marker, plus the station's own nudge.
+fn label_offset(label: Label) -> Vec2 {
+    let side = match label.side {
+        LabelSide::Left => Vec2::new(-13.0, 0.0),
+        LabelSide::Right => Vec2::new(13.0, 0.0),
+        LabelSide::Above => Vec2::new(0.0, 15.0),
+        LabelSide::Below => Vec2::new(0.0, -15.0),
+    };
+    side + Vec2::new(label.nudge.0, label.nudge.1)
 }
 
 /// The names of the water, set in the open space they occupy.
@@ -173,9 +180,11 @@ fn water_names(commands: &mut Commands, view: &MapView, fonts: &Fonts) {
         1.19,
         Vec2::ZERO,
     );
+    // Clear of the town of the same name, which is now a station on the
+    // lake's western shore.
     name(
         "Tabariyya",
-        view.screen(GeoPoint::new(32.79, 35.70)),
+        view.screen(GeoPoint::new(32.90, 35.62)),
         theme::CAPTION,
         0.0,
         Vec2::new(-0.5, 0.0),

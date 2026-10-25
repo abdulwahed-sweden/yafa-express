@@ -9,7 +9,7 @@ use std::time::Duration;
 use bevy::input::InputPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
-use yafa_core::{CityId, JourneyConfig, Passport};
+use yafa_core::{CityId, JourneyConfig, Network, Passport};
 use yafa_game::SimulationPlugin;
 use yafa_game::components::*;
 
@@ -232,10 +232,17 @@ fn a_lagged_frame_does_not_skip_a_station() {
     harness.tick(1.0 / 60.0);
 
     assert_eq!(harness.phase(), GamePhase::Arrived);
+
+    // Every stop the route actually calls at, asked of the network rather
+    // than written down here: which towns lie between Akka and Al-Khalil is
+    // the network's business, and it changes as lines are added.
+    let network = Network::new();
+    let route = network.route(CityId::Akka, CityId::AlKhalil).expect("connected");
     let passport = harness.passport();
-    for city in [CityId::Akka, CityId::Haifa, CityId::Tulkarm, CityId::AlKhalil] {
+    for city in route.stops() {
         assert!(passport.is_stamped(city), "{city:?} was skipped over");
     }
+    assert!(route.legs.len() > 4, "this needs to be a long run to be worth testing");
 }
 
 #[test]

@@ -42,14 +42,25 @@ cargo run --release
 
 ## The network
 
-Eleven stations on three corridors, with routing solved by Dijkstra over real
-track distances.
+Twenty-three stations on three corridors, with routing solved by Dijkstra over
+real track distances.
 
 | Corridor | Stations |
 | --- | --- |
-| **Coastal Line** | Akka, Haifa, Yafa, Ghazzah |
-| **Mountain Line** | Safad, Beisan, Nablus, Al-Quds, Al-Khalil |
+| **Coastal Line** | Akka, Haifa, Qaisariya, Yafa, Yibna, Isdud, Al-Majdal, Ghazzah, Khan Yunis, Rafah |
+| **Mountain Line** | Safad, Tabariya, Al-Nasira, Beisan, Jenin, Nablus, Ramallah, Al-Quds, Bayt Lahm, Al-Khalil, Bir al-Sabi' |
 | **Junction Links** | Al-Ladd, Tulkarm - where the coast meets the highlands |
+
+Where a real line ran through a town, the town is a stop on it rather than a
+detour around it: the Jezreel valley railway is Haifa to Al-Nasira to Beisan,
+and the 1917 military line south calls at Yibna, Isdud, Al-Majdal, Ghazzah and
+Khan Yunis on its way to Rafah. Haifa to Nablus therefore routes down the
+valley and its Jenin branch - 90 km - rather than round by Tulkarm at 100.
+
+Station names are carried in both scripts, and where a station stands too close
+to its neighbour for any rule to separate them - Al-Quds and Bayt Lahm are nine
+kilometres apart - the label placement is data on the station rather than a
+nudge to its coordinates. A coordinate is a claim about where a place is.
 
 Station positions are real latitudes and longitudes, projected onto the map;
 segment lengths are track distances, not straight lines. Routing therefore

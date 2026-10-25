@@ -78,22 +78,44 @@ pub struct Link {
 }
 
 /// The track table. Order is stable; `SegmentId` is the index into it.
-const TRACKS: [(CityId, CityId, LineType, u32, Opening); 12] = [
+///
+/// Where a real line ran through a town, the town is a station on it rather
+/// than a detour around it: the Jezreel valley railway is Haifa to Al-Nasira
+/// to Beisan, not Haifa to Beisan, because that is the ground it covered.
+const TRACKS: [(CityId, CityId, LineType, u32, Opening); 26] = [
     // The coastal corridor, north to south.
     (CityId::Akka, CityId::Haifa, LineType::Coastal, 23_000, Opening::Opened(1913)),
     (CityId::Haifa, CityId::Tulkarm, LineType::Coastal, 68_000, Opening::Opened(1915)),
     (CityId::Tulkarm, CityId::AlLadd, LineType::Coastal, 52_000, Opening::Opened(1915)),
     (CityId::AlLadd, CityId::Yafa, LineType::Coastal, 19_000, Opening::Opened(1892)),
-    (CityId::AlLadd, CityId::Ghazzah, LineType::Coastal, 74_000, Opening::Opened(1917)),
-    // The links that tie the coast to the highlands.
+    // The main line south, which the 1917 military railway pushed to the
+    // Egyptian frontier.
+    (CityId::AlLadd, CityId::Yibna, LineType::Coastal, 18_000, Opening::Opened(1917)),
+    (CityId::Yibna, CityId::Isdud, LineType::Coastal, 16_000, Opening::Opened(1917)),
+    (CityId::Isdud, CityId::AlMajdal, LineType::Coastal, 14_000, Opening::Opened(1917)),
+    (CityId::AlMajdal, CityId::Ghazzah, LineType::Coastal, 23_000, Opening::Opened(1917)),
+    (CityId::Ghazzah, CityId::KhanYunis, LineType::Coastal, 24_000, Opening::Opened(1917)),
+    (CityId::KhanYunis, CityId::Rafah, LineType::Coastal, 10_000, Opening::Opened(1917)),
+    // The coastal line proper, surveyed again and again and never laid.
+    (CityId::Haifa, CityId::Qaisariya, LineType::Coastal, 40_000, Opening::Projected),
+    (CityId::Qaisariya, CityId::Yafa, LineType::Coastal, 55_000, Opening::Projected),
+    // The links that tie the coast to the interior.
     (CityId::AlLadd, CityId::AlQuds, LineType::Junction, 67_000, Opening::Opened(1892)),
     (CityId::Tulkarm, CityId::Nablus, LineType::Junction, 32_000, Opening::Opened(1915)),
-    // The inland corridor, Galilee down the spine of the highlands.
-    (CityId::Haifa, CityId::Beisan, LineType::Mountain, 51_000, Opening::Opened(1904)),
-    (CityId::Beisan, CityId::Nablus, LineType::Mountain, 58_000, Opening::Opened(1914)),
-    (CityId::Beisan, CityId::Safad, LineType::Mountain, 44_000, Opening::Projected),
-    (CityId::Nablus, CityId::AlQuds, LineType::Mountain, 63_000, Opening::Projected),
-    (CityId::AlQuds, CityId::AlKhalil, LineType::Mountain, 36_000, Opening::Projected),
+    (CityId::Ghazzah, CityId::BirAlSabi, LineType::Junction, 48_000, Opening::Opened(1915)),
+    // The Jezreel valley railway, and the branch it threw south.
+    (CityId::Haifa, CityId::AlNasira, LineType::Mountain, 33_000, Opening::Opened(1904)),
+    (CityId::AlNasira, CityId::Beisan, LineType::Mountain, 28_000, Opening::Opened(1904)),
+    (CityId::AlNasira, CityId::Jenin, LineType::Mountain, 28_000, Opening::Opened(1913)),
+    (CityId::Jenin, CityId::Nablus, LineType::Mountain, 29_000, Opening::Opened(1914)),
+    // Up the spine of the highlands - mostly drawn, barely built.
+    (CityId::Beisan, CityId::Tabariya, LineType::Mountain, 35_000, Opening::Projected),
+    (CityId::Tabariya, CityId::Safad, LineType::Mountain, 24_000, Opening::Projected),
+    (CityId::Nablus, CityId::Ramallah, LineType::Mountain, 40_000, Opening::Projected),
+    (CityId::Ramallah, CityId::AlQuds, LineType::Mountain, 15_000, Opening::Projected),
+    (CityId::AlQuds, CityId::BaytLahm, LineType::Mountain, 11_000, Opening::Opened(1915)),
+    (CityId::BaytLahm, CityId::AlKhalil, LineType::Mountain, 24_000, Opening::Projected),
+    (CityId::BirAlSabi, CityId::AlKhalil, LineType::Mountain, 46_000, Opening::Projected),
 ];
 
 /// The whole map: stations, track, and the adjacency used for routing.
@@ -337,13 +359,34 @@ mod tests {
     #[test]
     fn dijkstra_picks_the_shorter_of_two_corridors() {
         let net = Network::new();
-        // Haifa to Nablus: via Beisan is 51+58=109 km, via Tulkarm is 68+32=100 km.
+        // Haifa to Nablus: down the valley line and its Jenin branch is
+        // 33+28+29 = 90 km; round by the coast through Tulkarm is 68+32 = 100.
+        // The branch wins, which is the way the trains actually went.
         let route = net.route(CityId::Haifa, CityId::Nablus).expect("route exists");
         assert_eq!(
             route.stops().collect::<Vec<_>>(),
-            vec![CityId::Haifa, CityId::Tulkarm, CityId::Nablus]
+            vec![CityId::Haifa, CityId::AlNasira, CityId::Jenin, CityId::Nablus]
         );
-        assert_eq!(route.total_m, 100_000);
+        assert_eq!(route.total_m, 90_000);
+    }
+
+    #[test]
+    fn a_town_on_a_line_is_a_stop_on_it() {
+        let net = Network::new();
+        // The 1917 line south ran through these towns rather than past them.
+        let route = net.route(CityId::AlLadd, CityId::Rafah).expect("route exists");
+        assert_eq!(
+            route.stops().collect::<Vec<_>>(),
+            vec![
+                CityId::AlLadd,
+                CityId::Yibna,
+                CityId::Isdud,
+                CityId::AlMajdal,
+                CityId::Ghazzah,
+                CityId::KhanYunis,
+                CityId::Rafah,
+            ]
+        );
     }
 
     #[test]

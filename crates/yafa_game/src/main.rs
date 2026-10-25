@@ -5,10 +5,13 @@ use bevy::prelude::*;
 use bevy::window::WindowResolution;
 use yafa_game::YafaExpressPlugin;
 
-/// Logical size of the window at launch. The layout is designed to fit
-/// comfortably inside it on a 1280-point-wide display.
-const WINDOW_WIDTH: u32 = 1280;
-const WINDOW_HEIGHT: u32 = 760;
+/// Logical size of the window at launch.
+///
+/// Twenty-three stations drawn at 3.6 pixels to the kilometre need a map 434
+/// by 686 pixels, which no longer fits beside the panels in the old 1280 by
+/// 760 frame.
+const WINDOW_WIDTH: u32 = 1440;
+const WINDOW_HEIGHT: u32 = 940;
 
 fn main() -> AppExit {
     App::new()

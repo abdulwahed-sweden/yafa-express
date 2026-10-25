@@ -297,3 +297,7 @@ pub struct StationRowNote(pub CityId);
 /// The telegraph code printed on a passport stamp card.
 #[derive(Component, Clone, Copy)]
 pub struct StampCardCode(pub CityId);
+
+/// The scrolling container holding the station rows.
+#[derive(Component)]
+pub struct StationList;

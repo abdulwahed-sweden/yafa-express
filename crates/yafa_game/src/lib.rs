@@ -147,6 +147,7 @@ impl Plugin for PresentationPlugin {
             .add_systems(
                 Update,
                 (
+                    ui::scroll_station_list,
                     ui::style_controls,
                     ui::refresh_ticket,
                     ui::refresh_board,

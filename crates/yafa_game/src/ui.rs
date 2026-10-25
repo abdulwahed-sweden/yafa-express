@@ -11,6 +11,7 @@
 //! code and time in the monospace - so the eye can tell a place from a
 //! measurement before it reads either.
 
+use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::text::LineHeight;
@@ -23,7 +24,9 @@ use crate::theme::{self, Fonts};
 
 const LEFT_WIDTH: f32 = 318.0;
 const RIGHT_WIDTH: f32 = 348.0;
-const BOARD_WIDTH: f32 = 520.0;
+const BOARD_WIDTH: f32 = 560.0;
+/// The station list is taller than the panel; past this it scrolls.
+const LIST_HEIGHT: f32 = 330.0;
 /// Stamp cards, four to a row inside the passport.
 const CARD_WIDTH: f32 = 74.0;
 const CARD_HEIGHT: f32 = 48.0;
@@ -218,14 +221,19 @@ fn keyboard_hints(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
 fn station_list(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
     panel
         .spawn((
+            StationList,
             Node {
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(2.0),
                 width: Val::Percent(100.0),
+                max_height: Val::Px(LIST_HEIGHT),
+                overflow: Overflow::scroll_y(),
                 margin: UiRect::top(Val::Px(3.0)),
                 ..default()
             },
-            Pickable::IGNORE,
+            // Scrollable, so it has to take the pointer rather than ignore it.
+            Pickable::default(),
+            Hovered::default(),
         ))
         .with_children(|list| {
             for line in LineType::ALL {
@@ -363,15 +371,12 @@ fn station_board(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
     centre
         .spawn((Node { width: Val::Px(BOARD_WIDTH), ..theme::panel_node() }, theme::panel_chrome()))
         .with_children(|panel| {
-            panel.spawn(theme::panel_header(
-                fonts,
-                "Station Board",
-                "Departures, arrivals and the state of the line",
-            ));
+            // No heading on this one: every pixel it takes is a pixel of the
+            // map's southern end that disappears behind it.
             panel.spawn((
                 BoardStatus,
                 Text::new("Waiting for a ticket"),
-                fonts.sign(theme::DISPLAY),
+                fonts.sign(theme::HEADING),
                 TextColor(theme::INK),
                 Pickable::IGNORE,
             ));
@@ -1017,4 +1022,31 @@ fn ordinal(order: u32) -> String {
     NAMES
         .get(order.saturating_sub(1) as usize)
         .map_or_else(|| format!("{order}th"), |name| (*name).to_owned())
+}
+
+/// Scrolls the station list under the pointer.
+///
+/// Twenty-three stations are more than the counter can show at once, so the
+/// list is a scrolling column. Bevy moves the content but leaves the wheel to
+/// the game.
+pub fn scroll_station_list(
+    mut wheel: MessageReader<MouseWheel>,
+    mut lists: Query<(&Hovered, &mut ScrollPosition), With<StationList>>,
+) {
+    let mut ticks = 0.0;
+    for event in wheel.read() {
+        // A line of a wheel is worth about one row; a trackpad reports pixels.
+        ticks += match event.unit {
+            MouseScrollUnit::Line => event.y * 26.0,
+            MouseScrollUnit::Pixel => event.y,
+        };
+    }
+    if ticks == 0.0 {
+        return;
+    }
+    for (hovered, mut scroll) in &mut lists {
+        if hovered.get() {
+            scroll.0.y = (scroll.0.y - ticks).max(0.0);
+        }
+    }
 }
