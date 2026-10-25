@@ -18,8 +18,8 @@ use yafa_game::{GameSet, SimulationPlugin, map, ui};
 
 /// The game with its interface built, but nothing rendering it.
 ///
-/// The gizmo systems are left out: they are the only part of the presentation
-/// layer that needs the renderer's own resources.
+/// `map::spawn_water` and the gizmo systems are left out: they are the parts
+/// of the presentation layer that need the renderer's own resources.
 fn headless_with_ui(name: &str) -> App {
     let mut app = App::new();
     app.add_plugins((InputPlugin, StatesPlugin))

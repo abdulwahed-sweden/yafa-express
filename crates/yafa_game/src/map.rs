@@ -1,13 +1,16 @@
 //! The map view: projecting the country onto the screen, drawing its water and
 //! its track, and the locomotive that runs over it.
 //!
-//! Everything here is drawn with gizmos rather than meshes. It costs nothing to
-//! redraw each frame, and it lets the map be *drawn* rather than filled: rails
-//! read as two running lines with sleepers between them, and the sea as the
-//! parallel water lines an engraver would have cut around a coast.
+//! The linework - track, shorelines, the graticule, the scale bar - is gizmos,
+//! redrawn each frame for nothing. The water is meshes, built once: 2D gizmos
+//! are sorted last whatever their depth, so a fill drawn with them would cover
+//! every station marker and label standing on it.
 
+use bevy::asset::RenderAssetUsages;
+use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
+use bevy::sprite_render::ColorMaterial;
 use yafa_core::{CityId, GeoPoint, LineType, Network, Opening, coast};
 
 use crate::components::*;
@@ -37,17 +40,14 @@ const STATION_SIZE: f32 = 8.0;
 /// Size of the invisible pad that catches clicks on a station.
 const STATION_HIT: f32 = 26.0;
 
-/// How many water lines are drawn out from the shore.
-const WATER_LINES: usize = 7;
-/// Pixels between them.
-const WATER_SPACING: f32 = 12.0;
-/// Seaward direction, perpendicular to the overall run of the coast.
-///
-/// The water lines are the whole shore translated along this, rather than each
-/// segment pushed out along its own normal: a translation can never fold in on
-/// itself, which per-segment offsets do the moment the coast turns concave -
-/// as it does at Haifa Bay.
-const SEAWARD: Vec2 = Vec2::new(-0.93, 0.37);
+/// How far west of the frame the sea polygon is closed off, in pixels. The
+/// window is 1280 logical pixels wide with the camera at its centre, so this
+/// is comfortably outside anything that can be seen.
+const SEA_EDGE: f32 = -760.0;
+/// How far past the top and bottom of the frame the sea is carried, in pixels.
+const FRAME_OVERRUN: f32 = 600.0;
+/// Depth of the water, below the station markers and their labels.
+const WATER_Z: f32 = -10.0;
 
 /// Builds the projection from the network's own extent, so the map stays
 /// centred if the city table ever changes.
@@ -123,10 +123,9 @@ pub fn spawn_map(mut commands: Commands, rail: Res<Rail>, view: Res<MapView>, fo
             ))
             .with_child((
                 StationLabel(city),
-                Text2d::new(data.name.to_uppercase()),
+                Text2d::new(data.name.to_owned()),
                 fonts.sign(theme::SIGN),
                 TextColor(theme::MAP_INK),
-                theme::TRACKED,
                 // Coastal names are set out over the sea, inland names over the
                 // hills, so neither crowds the track between them.
                 label_anchor(data.line_type),
@@ -154,13 +153,12 @@ fn label_offset(line: LineType) -> Vec2 {
 
 /// The names of the water, set in the open space they occupy.
 fn water_names(commands: &mut Commands, view: &MapView, fonts: &Fonts) {
-    let sea_ink = theme::SEA_INK.with_alpha(0.95);
+    let sea_ink = theme::SEA_LABEL;
     let mut name = |text: &str, at: Vec2, size: f32, turn: f32, anchor: Vec2| {
         commands.spawn((
             Text2d::new(text.to_owned()),
             fonts.sign(size),
             TextColor(sea_ink),
-            theme::TRACKED_WIDE,
             Anchor(anchor),
             Transform::from_translation(at.extend(1.0)).with_rotation(Quat::from_rotation_z(turn)),
             Pickable::IGNORE,
@@ -168,9 +166,27 @@ fn water_names(commands: &mut Commands, view: &MapView, fonts: &Fonts) {
     };
 
     // Set along the run of the coast, the way a sea name always is.
-    name("THE MEDITERRANEAN", view.screen(GeoPoint::new(32.30, 34.26)), 16.0, 1.19, Vec2::ZERO);
-    name("TABARIYYA", view.screen(GeoPoint::new(32.79, 35.70)), 10.0, 0.0, Vec2::new(-0.5, 0.0));
-    name("BAHR LUT", view.screen(GeoPoint::new(31.62, 35.63)), 10.0, 0.0, Vec2::new(-0.5, 0.0));
+    name(
+        "The Mediterranean",
+        view.screen(GeoPoint::new(32.30, 34.26)),
+        theme::HEADING,
+        1.19,
+        Vec2::ZERO,
+    );
+    name(
+        "Tabariyya",
+        view.screen(GeoPoint::new(32.79, 35.70)),
+        theme::CAPTION,
+        0.0,
+        Vec2::new(-0.5, 0.0),
+    );
+    name(
+        "Bahr Lut",
+        view.screen(GeoPoint::new(31.62, 35.63)),
+        theme::CAPTION,
+        0.0,
+        Vec2::new(-0.5, 0.0),
+    );
 }
 
 /// A small 0-4-0 tank engine, assembled from plain coloured rectangles.
@@ -180,6 +196,9 @@ fn water_names(commands: &mut Commands, view: &MapView, fonts: &Fonts) {
 fn spawn_train(commands: &mut Commands) {
     const IRON: Color = Color::srgb_u8(0x25, 0x1E, 0x1A);
     const IRON_LIGHT: Color = Color::srgb_u8(0x3A, 0x30, 0x29);
+    /// The lamp, the boiler band and the running gear. Warm paintwork on the
+    /// engine, not a state the player is meant to read.
+    const LIVERY: Color = Color::srgb_u8(0xB8, 0x65, 0x1F);
 
     commands.spawn((
         Train,
@@ -199,18 +218,18 @@ fn spawn_train(commands: &mut Commands) {
                 Sprite::from_color(IRON_LIGHT, Vec2::new(4.4, 8.5)),
                 Transform::from_xyz(10.0, 6.2, 0.1),
             ),
-            // Brass band and lamp.
+            // Band and lamp.
             (
-                Sprite::from_color(theme::BRASS, Vec2::new(2.4, 11.0)),
+                Sprite::from_color(LIVERY, Vec2::new(2.4, 11.0)),
                 Transform::from_xyz(6.2, 0.0, 0.2),
             ),
             (
-                Sprite::from_color(theme::BRASS, Vec2::new(3.0, 3.6)),
+                Sprite::from_color(LIVERY, Vec2::new(3.0, 3.6)),
                 Transform::from_xyz(15.0, 0.6, 0.2),
             ),
             // Running gear.
             (
-                Sprite::from_color(theme::STAMP_RED, Vec2::new(23.0, 3.0)),
+                Sprite::from_color(LIVERY, Vec2::new(23.0, 3.0)),
                 Transform::from_xyz(0.0, -6.2, 0.2),
             ),
         ],
@@ -219,21 +238,122 @@ fn spawn_train(commands: &mut Commands) {
 
 // --- The country ----------------------------------------------------------
 
-/// Draws the water and the graticule beneath everything else.
+/// Draws the graticule. The water itself is geometry, not gizmos - see
+/// [`spawn_water`].
 pub fn draw_country(mut gizmos: Gizmos, view: Res<MapView>) {
     graticule(&mut gizmos, &view);
+}
+
+/// Builds the sea, the lake and the Dead Sea as meshes, once.
+///
+/// These have to be real geometry rather than a gizmo fill: 2D gizmos are
+/// sorted last whatever their depth, so anything drawn with them covers every
+/// sprite and label beneath it - which, for a fill the size of the
+/// Mediterranean, means every coastal station on the map.
+///
+/// Kept apart from [`spawn_map`] because it is the one piece of map setup that
+/// needs the renderer's asset stores, and the headless tests have none.
+pub fn spawn_water(
+    mut commands: Commands,
+    view: Res<MapView>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let fill = materials.add(ColorMaterial::from_color(theme::SEA_FILL));
 
     let shore: Vec<Vec2> = coast::SHORE.iter().map(|&p| view.screen(p)).collect();
-    water_lines(&mut gizmos, &shore, WATER_LINES);
-    polyline(&mut gizmos, &shore, theme::SEA_INK.with_alpha(0.62));
+    let mut water = vec![sea_mesh(&shore)];
+    for ring in [coast::TABARIYYA.as_slice(), coast::BAHR_LUT.as_slice()] {
+        let points: Vec<Vec2> = ring.iter().map(|&p| view.screen(p)).collect();
+        water.push(fan_mesh(&points));
+    }
+
+    for mesh in water {
+        commands.spawn((
+            Mesh2d(meshes.add(mesh)),
+            MeshMaterial2d(fill.clone()),
+            Transform::from_translation(Vec3::new(0.0, 0.0, WATER_Z)),
+            Pickable::IGNORE,
+        ));
+    }
+}
+
+/// The sea, as one quad per stretch of shore running out to a western edge
+/// well outside the frame.
+///
+/// Where the coast turns back on itself - it does so once, at Haifa Bay -
+/// neighbouring quads overlap. They are the same flat colour, so the overlap
+/// is invisible, and this stays far simpler than triangulating the region.
+fn sea_mesh(shore: &[Vec2]) -> Mesh {
+    let (Some(first), Some(last)) = (shore.first(), shore.last()) else {
+        return empty_mesh();
+    };
+
+    // Carry the ends past the top and bottom of the view as well.
+    let mut edge = Vec::with_capacity(shore.len() + 2);
+    edge.push(Vec2::new(first.x, first.y + FRAME_OVERRUN));
+    edge.extend_from_slice(shore);
+    edge.push(Vec2::new(last.x, last.y - FRAME_OVERRUN));
+
+    let mut positions = Vec::with_capacity(edge.len() * 2);
+    for point in &edge {
+        positions.push([point.x, point.y, 0.0]);
+        positions.push([SEA_EDGE, point.y, 0.0]);
+    }
+
+    let mut indices = Vec::new();
+    for strip in 0..edge.len().saturating_sub(1) {
+        let base = (strip * 2) as u32;
+        indices.extend_from_slice(&[base, base + 1, base + 3]);
+        indices.extend_from_slice(&[base, base + 3, base + 2]);
+    }
+
+    mesh_from(positions, indices)
+}
+
+/// A closed body of water, as a fan from its own centroid.
+fn fan_mesh(ring: &[Vec2]) -> Mesh {
+    if ring.len() < 3 {
+        return empty_mesh();
+    }
+    let centre = ring.iter().copied().sum::<Vec2>() / ring.len() as f32;
+
+    let mut positions = Vec::with_capacity(ring.len() + 1);
+    positions.push([centre.x, centre.y, 0.0]);
+    positions.extend(ring.iter().map(|p| [p.x, p.y, 0.0]));
+
+    let mut indices = Vec::new();
+    for corner in 0..ring.len() {
+        let next = corner % ring.len() + 1;
+        let wrapped = (corner + 1) % ring.len() + 1;
+        indices.extend_from_slice(&[0, next as u32, wrapped as u32]);
+    }
+
+    mesh_from(positions, indices)
+}
+
+fn mesh_from(positions: Vec<[f32; 3]>, indices: Vec<u32>) -> Mesh {
+    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+        .with_inserted_indices(Indices::U32(indices))
+}
+
+fn empty_mesh() -> Mesh {
+    mesh_from(Vec::new(), Vec::new())
+}
+
+/// Draws the shorelines over the fills.
+pub fn draw_shorelines(mut gizmos: Gizmos, view: Res<MapView>) {
+    let shore: Vec<Vec2> = coast::SHORE.iter().map(|&p| view.screen(p)).collect();
+    polyline(&mut gizmos, &shore, theme::SEA_INK);
 
     for ring in [coast::TABARIYYA.as_slice(), coast::BAHR_LUT.as_slice()] {
         let points: Vec<Vec2> = ring.iter().map(|&p| view.screen(p)).collect();
-        closed_water(&mut gizmos, &points);
+        closed_polyline(&mut gizmos, &points, theme::SEA_INK);
     }
 
     let jordan: Vec<Vec2> = coast::JORDAN.iter().map(|&p| view.screen(p)).collect();
-    polyline(&mut gizmos, &jordan, theme::SEA_INK.with_alpha(0.45));
+    polyline(&mut gizmos, &jordan, theme::SEA_INK);
 }
 
 /// The faint grid of whole and half degrees, which reads as the ruling of the
@@ -251,56 +371,6 @@ fn graticule(gizmos: &mut Gizmos, view: &MapView) {
         let a = view.screen(GeoPoint::new(30.8, lon));
         let b = view.screen(GeoPoint::new(33.4, lon));
         gizmos.line_2d(a, b, theme::GRATICULE);
-    }
-}
-
-/// Parallel lines stepped out from the shore into the sea, fading as they go -
-/// the engraver's way of saying "water" without filling anything in.
-fn water_lines(gizmos: &mut Gizmos, shore: &[Vec2], count: usize) {
-    for step in 1..=count {
-        let offset = SEAWARD * (step as f32 * WATER_SPACING);
-        let alpha = 0.20 * (1.0 - (step - 1) as f32 / count as f32).powf(1.4);
-        let color = theme::SEA_INK.with_alpha(alpha);
-        for pair in shore.windows(2) {
-            gizmos.line_2d(pair[0] + offset, pair[1] + offset, color);
-        }
-    }
-}
-
-/// A closed body of water: its outline, and the horizontal ruling inside it
-/// that a printed map uses instead of a flat fill.
-fn closed_water(gizmos: &mut Gizmos, ring: &[Vec2]) {
-    hatch_ring(gizmos, ring, 4.0, theme::SEA_INK.with_alpha(0.30));
-    closed_polyline(gizmos, ring, theme::SEA_INK.with_alpha(0.68));
-}
-
-/// Even-odd scanline ruling of a closed ring.
-fn hatch_ring(gizmos: &mut Gizmos, ring: &[Vec2], spacing: f32, color: Color) {
-    if ring.len() < 3 || spacing <= 0.0 {
-        return;
-    }
-    let (min_y, max_y) =
-        ring.iter().fold((f32::MAX, f32::MIN), |(lo, hi), p| (lo.min(p.y), hi.max(p.y)));
-
-    let mut crossings = Vec::with_capacity(8);
-    let mut y = min_y + spacing * 0.5;
-    while y < max_y {
-        crossings.clear();
-        for index in 0..ring.len() {
-            let a = ring[index];
-            let b = ring[(index + 1) % ring.len()];
-            // Half-open test, so a vertex exactly on the scanline is counted
-            // once rather than twice.
-            if (a.y <= y) != (b.y <= y) {
-                let t = (y - a.y) / (b.y - a.y);
-                crossings.push(a.x + (b.x - a.x) * t);
-            }
-        }
-        crossings.sort_by(f32::total_cmp);
-        for &[left, right] in crossings.as_chunks::<2>().0 {
-            gizmos.line_2d(Vec2::new(left, y), Vec2::new(right, y), color);
-        }
-        y += spacing;
     }
 }
 
@@ -421,13 +491,13 @@ pub fn draw_station_rings(
         let at = view.world(rail.position(city));
 
         if book.passport.is_stamped(city) {
-            gizmos.circle_2d(at, STATION_SIZE + 3.5, theme::BRASS.with_alpha(0.85));
+            gizmos.circle_2d(at, STATION_SIZE + 3.5, theme::VISITED.with_alpha(0.85));
         }
         if desk.origin == Some(city) {
-            gizmos.circle_2d(at, STATION_SIZE + 7.0, theme::OLIVE);
+            gizmos.circle_2d(at, STATION_SIZE + 7.0, theme::VISITED);
         }
         if desk.destination == Some(city) {
-            gizmos.circle_2d(at, STATION_SIZE + 7.0, theme::STAMP_RED);
+            gizmos.circle_2d(at, STATION_SIZE + 7.0, theme::PENDING);
         }
         if focus.0 == Some(city) {
             let radius = STATION_SIZE + 10.0 + pulse * 3.0;
@@ -513,7 +583,12 @@ fn scale_bar_figures(commands: &mut Commands, view: &MapView, fonts: &Fonts) {
         ));
     };
 
-    figure("0".to_owned(), origin + Vec2::new(0.0, -9.0), 9.0, Vec2::ZERO);
-    figure(format!("{:.0} KM", SCALE_KM), origin + Vec2::new(length, -9.0), 9.0, Vec2::ZERO);
-    figure("N".to_owned(), origin + Vec2::new(length * 0.5, 54.0), 10.0, Vec2::ZERO);
+    figure("0".to_owned(), origin + Vec2::new(0.0, -11.0), theme::CAPTION, Vec2::ZERO);
+    figure(
+        format!("{:.0} km", SCALE_KM),
+        origin + Vec2::new(length, -11.0),
+        theme::CAPTION,
+        Vec2::ZERO,
+    );
+    figure("N".to_owned(), origin + Vec2::new(length * 0.5, 56.0), theme::CAPTION, Vec2::ZERO);
 }

@@ -85,7 +85,7 @@ crates/
     systems.rs   ticketing, movement, stamping, saving
     ui.rs        ticket counter, station board, city panel, passport
     theme.rs     palette, typefaces and shared chrome
-    assets/fonts/  the three faces, compiled into the binary
+    assets/fonts/  Plex Sans, Plex Sans Arabic and Plex Mono, compiled in
     tests/
       journey.rs   whole journeys driven through the real ECS, headless
       layout.rs    the real interface spawned and refreshed, headless
@@ -137,38 +137,48 @@ does not.
 
 ## Design notes
 
-The look is a set of railway documents laid out on a dark desk: aged ticket
-paper, printing ink, brass fittings and a red stamp pad.
+One light page, one type family, flat colour. The only colour that carries
+meaning is the colour of a line or the state of a station.
 
-### Three voices, three typefaces
-
-Typography does the organising, so the eye can tell a place from a measurement
-before it reads either.
-
-| Face | Used for |
+| Role | |
 | --- | --- |
-| **Oswald** | Signage - station names, panel headings, the board's status line |
-| **IBM Plex Serif** | The printed page - history, explanations, anything in sentences |
-| **IBM Plex Mono** | The machine - codes, distances, times, announcements |
+| Page / map ground | `#f7f5ef` |
+| Cards | `#ffffff` on a `#e3ded2` hairline |
+| Headings / primary text | `#16243a` / `#141d29` |
+| Muted | `#4b5563` |
+| Coastal Line / Mountain Line / Junction Links | `#1c8a84` / `#b8651f` / `#6b7482` |
+| Sea | `#d8efed` |
+| Visited / not yet visited | `#1f8a4c` / `#9aa4b3` |
 
-All three are compiled into the binary rather than loaded from a folder, so the
-executable runs from any working directory and can be copied anywhere without
-losing its lettering. Both families are under the SIL Open Font License; the
-licences sit beside them in `crates/yafa_game/assets/fonts`.
+### One family
 
-### The map is drawn, not filled
+IBM Plex Sans does all the lettering, with IBM Plex Sans Arabic behind it in
+every fallback chain so Arabic script is set in a face from the same design
+rather than in whatever the system offers. IBM Plex Mono is kept for figures -
+distances, times and station codes - where a fixed advance keeps columns
+aligned.
+
+The scale is five steps: 14 caption, 17 body, 18 station name, 20 heading, 28
+display. Nothing is tracked, and nothing is set in capitals except the
+three-letter station codes, which are codes rather than styling.
+
+Both families are compiled into the binary rather than loaded from a folder,
+so the executable runs from any working directory and can be copied anywhere
+without losing its lettering. They are under the SIL Open Font License; the
+licence sits beside them in `crates/yafa_game/assets/fonts`.
+
+### The map
 
 Every mark on the map is a gizmo line, redrawn each frame:
 
 - **Track** is two running rails with sleepers between them, so it reads as
   track rather than as a stroke. Surveyed-but-unbuilt track is a broken line.
-- **The sea** is the shoreline translated seaward seven times, fading as it
-  goes - the water lines an engraver would have cut around a coast. They are a
-  translation of the whole polyline rather than a per-segment offset, because a
-  translation cannot fold in on itself and per-segment offsets do, the moment
-  the coast turns concave. It turns concave at Haifa Bay.
-- **The lake and the Dead Sea** are ruled by an even-odd scanline fill, the way
-  a printed map shades water.
+- **The sea, the lake and the Dead Sea** are flat fills. Gizmos draw lines and
+  not polygons, so a fill is an even-odd scanline a pixel apart - a few hundred
+  lines a frame, which costs nothing and saves carrying a mesh and a material
+  just to colour the sea. The sea's polygon is the shoreline closed off well
+  outside the frame, so the fill runs off every edge instead of stopping on a
+  visible seam.
 - **A graticule, a scale bar and a north arrow** give the sheet its structure.
 
 ### Everything else

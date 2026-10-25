@@ -73,11 +73,10 @@ fn ticket_counter(root: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts
                     "Choose where you board and where you are bound",
                 ));
                 ticket_stub(panel, fonts);
-                panel.spawn(theme::perforation(34));
                 panel.spawn((
                     TicketRouteText,
                     Text::new("Select a departure station"),
-                    fonts.data(theme::SMALL),
+                    fonts.data(theme::CAPTION),
                     TextColor(theme::INK_SOFT),
                     LineHeight::RelativeToFont(1.45),
                     Pickable::IGNORE,
@@ -102,8 +101,8 @@ fn ticket_stub(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
             Pickable::IGNORE,
         ))
         .with_children(|row| {
-            slot_box(row, fonts, "FROM", TicketSlot::Origin, theme::OLIVE);
-            slot_box(row, fonts, "TO", TicketSlot::Destination, theme::STAMP_RED);
+            slot_box(row, fonts, "From", TicketSlot::Origin, theme::VISITED);
+            slot_box(row, fonts, "To", TicketSlot::Destination, theme::PENDING);
         });
 }
 
@@ -132,7 +131,6 @@ fn slot_box(
                 Text::new(caption.to_owned()),
                 fonts.data(theme::CAPTION),
                 TextColor(theme::INK_FAINT),
-                theme::TRACKED,
                 Pickable::IGNORE,
             ),
             (
@@ -163,10 +161,9 @@ fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 DepartButton,
                 Node { flex_grow: 1.0, ..control_node() },
                 children![(
-                    Text::new("DEPART"),
+                    Text::new("Depart"),
                     fonts.sign_bold(theme::BODY),
                     TextColor(theme::INK),
-                    theme::TRACKED,
                     Pickable::IGNORE,
                 )],
             ));
@@ -174,10 +171,9 @@ fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 control_chrome(UiAction::ClearTicket),
                 control_node(),
                 children![(
-                    Text::new("CLEAR"),
+                    Text::new("Clear"),
                     fonts.sign(theme::BODY),
                     TextColor(theme::INK_SOFT),
-                    theme::TRACKED,
                     Pickable::IGNORE,
                 )],
             ));
@@ -186,10 +182,9 @@ fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 control_node(),
                 children![(
                     ClockLabel,
-                    Text::new("EXPRESS"),
+                    Text::new("Express"),
                     fonts.sign(theme::BODY),
                     TextColor(theme::INK_SOFT),
-                    theme::TRACKED,
                     Pickable::IGNORE,
                 )],
             ));
@@ -210,7 +205,7 @@ fn keyboard_hints(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
         children![
             theme::double_rule(),
             (
-                Text::new("SPACE depart · ESC clear · TAB timetable"),
+                Text::new("Space depart · Esc clear · Tab timetable"),
                 fonts.data(theme::CAPTION),
                 TextColor(theme::INK_FAINT),
                 Pickable::IGNORE,
@@ -250,10 +245,9 @@ fn station_list(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts)
                             Pickable::IGNORE,
                         ),
                         (
-                            Text::new(line.label().to_uppercase()),
+                            Text::new(line.label().to_owned()),
                             fonts.data(theme::CAPTION),
                             TextColor(theme::INK_SOFT),
-                            theme::TRACKED,
                             Pickable::IGNORE,
                         ),
                     ],
@@ -296,7 +290,7 @@ fn station_row(
             (
                 Text::new(city.code()),
                 fonts.data(theme::CAPTION),
-                TextColor(theme::BRASS_DEEP),
+                TextColor(theme::SLATE),
                 Pickable::IGNORE,
             ),
             (
@@ -347,15 +341,14 @@ fn centre_column(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
             Pickable::IGNORE,
             children![
                 (
-                    Text::new("YAFA EXPRESS"),
-                    fonts.sign_bold(theme::TITLE - 4.0),
-                    TextColor(theme::BRASS),
-                    theme::TRACKED_WIDE,
+                    Text::new("Yafa Express"),
+                    fonts.sign_bold(theme::DISPLAY),
+                    TextColor(theme::INK_HEADER),
                     Pickable::IGNORE,
                 ),
                 (
                     Text::new("the railways of historical Palestine"),
-                    fonts.prose(theme::SMALL),
+                    fonts.prose(theme::CAPTION),
                     TextColor(theme::INK_FAINT),
                     Pickable::IGNORE,
                 ),
@@ -377,25 +370,24 @@ fn station_board(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
             ));
             panel.spawn((
                 BoardStatus,
-                Text::new("WAITING FOR A TICKET"),
-                fonts.sign(theme::LARGE + 2.0),
+                Text::new("Waiting for a ticket"),
+                fonts.sign(theme::DISPLAY),
                 TextColor(theme::INK),
-                theme::TRACKED_WIDE,
                 Pickable::IGNORE,
             ));
             panel.spawn((
                 BoardDetail,
                 Text::new("The counter is open."),
-                fonts.prose(theme::SMALL),
+                fonts.prose(theme::CAPTION),
                 TextColor(theme::INK_SOFT),
                 LineHeight::RelativeToFont(1.4),
                 Pickable::IGNORE,
             ));
-            progress_bar(panel, BoardProgressFill, theme::OLIVE);
+            progress_bar(panel, BoardProgressFill, theme::VISITED);
             panel.spawn((
                 BoardAnnouncements,
                 Text::new(""),
-                fonts.data(theme::SMALL),
+                fonts.data(theme::CAPTION),
                 TextColor(theme::INK_SOFT),
                 LineHeight::RelativeToFont(1.55),
                 Pickable::IGNORE,
@@ -416,7 +408,7 @@ fn progress_bar(panel: &mut ChildSpawnerCommands, fill: impl Component, color: C
                 ..default()
             },
             BackgroundColor(theme::PAPER_DEEP),
-            BorderColor::all(theme::BRASS_DEEP),
+            BorderColor::all(theme::SLATE),
             Pickable::IGNORE,
         ))
         .with_child((
@@ -460,7 +452,6 @@ fn city_panel(column: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 Text::new("Yafa"),
                 fonts.sign(theme::DISPLAY),
                 TextColor(theme::INK),
-                theme::TRACKED,
                 Pickable::IGNORE,
             ),
             (
@@ -482,7 +473,7 @@ fn city_panel(column: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 CityPanelPart::Links,
                 Text::new(""),
                 fonts.data(theme::CAPTION),
-                TextColor(theme::BRASS_DEEP),
+                TextColor(theme::SLATE),
                 LineHeight::RelativeToFont(1.5),
                 Pickable::IGNORE,
             ),
@@ -490,8 +481,9 @@ fn city_panel(column: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 CityPanelPart::Stamped,
                 Text::new(""),
                 fonts.data_strong(theme::CAPTION),
-                TextColor(theme::STAMP_RED),
-                theme::TRACKED,
+                // Overwritten by `refresh_city_panel` on the first frame, which
+                // picks visited or muted; this is only what it starts as.
+                TextColor(theme::INK_SOFT),
                 Pickable::IGNORE,
             ),
         ],
@@ -509,17 +501,16 @@ fn passport_panel(column: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fon
             ));
             panel.spawn((
                 PassportCounter,
-                Text::new("VISITED CITIES  0 / 11"),
-                fonts.sign(theme::LARGE),
+                Text::new("Visited cities  0 / 11"),
+                fonts.sign(theme::HEADING),
                 TextColor(theme::INK),
-                theme::TRACKED,
                 Pickable::IGNORE,
             ));
-            progress_bar(panel, PassportFill, theme::STAMP_RED);
+            progress_bar(panel, PassportFill, theme::VISITED);
             panel.spawn((
                 PassportLines,
                 Text::new(""),
-                fonts.data(theme::SMALL),
+                fonts.data(theme::CAPTION),
                 TextColor(theme::INK_SOFT),
                 Pickable::IGNORE,
             ));
@@ -583,26 +574,39 @@ fn stamp_grid(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
                     },
                     BackgroundColor(theme::PAPER_DEEP),
                     BorderColor::all(theme::INK_FAINT),
+                    // Code and number share a line: at the new type sizes three
+                    // stacked lines no longer fit a card this size, and the
+                    // number belongs with the code anyway.
                     children![
                         (
-                            StampCardCode(city),
-                            Text::new(city.code()),
-                            fonts.sign_bold(theme::LARGE),
-                            TextColor(theme::INK_FAINT),
-                            theme::TRACKED,
+                            Node {
+                                flex_direction: FlexDirection::Row,
+                                align_items: AlignItems::Baseline,
+                                column_gap: Val::Px(4.0),
+                                ..default()
+                            },
                             Pickable::IGNORE,
+                            children![
+                                (
+                                    StampCardCode(city),
+                                    Text::new(city.code()),
+                                    fonts.sign_bold(theme::SIGN),
+                                    TextColor(theme::INK_FAINT),
+                                    Pickable::IGNORE,
+                                ),
+                                (
+                                    StampCardOrder(city),
+                                    Text::new(""),
+                                    fonts.data(theme::CAPTION),
+                                    TextColor(theme::INK_FAINT),
+                                    Pickable::IGNORE,
+                                ),
+                            ],
                         ),
                         (
                             Text::new(data.name),
                             fonts.prose(theme::CAPTION),
-                            TextColor(theme::INK_FAINT),
-                            Pickable::IGNORE,
-                        ),
-                        (
-                            StampCardOrder(city),
-                            Text::new("-"),
-                            fonts.data(8.5),
-                            TextColor(theme::INK_FAINT),
+                            TextColor(theme::INK_SOFT),
                             Pickable::IGNORE,
                         ),
                     ],
@@ -639,7 +643,7 @@ fn control_chrome(action: UiAction) -> impl Bundle {
         Hovered::default(),
         Pickable::default(),
         BackgroundColor(theme::PAPER_DEEP),
-        BorderColor::all(theme::BRASS_DEEP),
+        BorderColor::all(theme::SLATE),
     )
 }
 
@@ -705,16 +709,16 @@ pub fn refresh_ticket(
     }
 
     if let Ok(mut text) = clock_label.single_mut() {
-        text.0 = clock.clock_label().to_uppercase();
+        text.0 = clock.clock_label().to_owned();
     }
 
     for (StationRow(city), hovered, mut background, mut border) in &mut rows {
         let (bg, accent) = if desk.origin == Some(*city) {
-            (theme::PAPER_PRESSED, theme::OLIVE)
+            (theme::PAPER_PRESSED, theme::VISITED)
         } else if desk.destination == Some(*city) {
-            (theme::PAPER_PRESSED, theme::STAMP_RED)
+            (theme::PAPER_PRESSED, theme::PENDING)
         } else if hovered.get() {
-            (theme::PAPER_DEEP, theme::BRASS)
+            (theme::PAPER_DEEP, theme::INK_FAINT)
         } else {
             (theme::PAPER, Color::NONE)
         };
@@ -724,11 +728,11 @@ pub fn refresh_ticket(
 
     for (StationRowNote(city), mut text, mut color) in &mut notes {
         let (note, tint) = if desk.origin == Some(*city) {
-            ("FROM", theme::OLIVE)
+            ("From", theme::VISITED)
         } else if desk.destination == Some(*city) {
-            ("TO", theme::STAMP_RED)
+            ("To", theme::PENDING)
         } else if book.passport.is_stamped(*city) {
-            ("✓", theme::BRASS_DEEP)
+            ("✓", theme::VISITED)
         } else {
             ("", theme::INK_FAINT)
         };
@@ -741,7 +745,7 @@ pub fn refresh_ticket(
         // train is in, where it books the next journey.
         let ready = *phase.get() == GamePhase::Arrived
             || (desk.is_ready() && *phase.get() == GamePhase::AtTheCounter);
-        *border = BorderColor::all(if ready { theme::OLIVE } else { theme::INK_FAINT });
+        *border = BorderColor::all(if ready { theme::VISITED } else { theme::INK_FAINT });
     }
 }
 
@@ -763,18 +767,18 @@ pub fn refresh_board(
 
     let (headline, body, progress) = match run {
         None => (
-            "WAITING FOR A TICKET".to_owned(),
+            "Waiting for a ticket".to_owned(),
             "The counter is open. Pick a departure and a destination.".to_owned(),
             0.0,
         ),
         Some(run) => {
             let leg = run.current_leg();
             let headline = match run.phase() {
-                Phase::Boarding => format!("BOARDING AT {}", rail.city(leg.from).name),
-                Phase::Running => format!("IN TRANSIT TO {}", rail.city(leg.to).name),
-                Phase::Dwelling => format!("STANDING AT {}", rail.city(leg.from).name),
+                Phase::Boarding => format!("Boarding at {}", rail.city(leg.from).name),
+                Phase::Running => format!("In transit to {}", rail.city(leg.to).name),
+                Phase::Dwelling => format!("Standing at {}", rail.city(leg.from).name),
                 Phase::Arrived => {
-                    format!("ARRIVED AT {}", rail.city(run.route().destination()).name)
+                    format!("Arrived at {}", rail.city(run.route().destination()).name)
                 }
             };
             let body = match run.phase() {
@@ -790,7 +794,7 @@ pub fn refresh_board(
                     run.eta_minutes(&clock.0),
                 ),
             };
-            (headline.to_uppercase(), body, run.progress())
+            (headline, body, run.progress())
         }
     };
 
@@ -813,15 +817,15 @@ pub fn refresh_city_panel(
     rail: Res<Rail>,
     focus: Res<Focus>,
     book: Res<PassportBook>,
-    mut parts: Query<(&CityPanelPart, &mut Text)>,
+    mut parts: Query<(&CityPanelPart, &mut Text, &mut TextColor)>,
 ) {
     let Some(city) = focus.0 else { return };
     let data = rail.city(city);
     let stamp = book.passport.stamp_for(city);
 
-    for (part, mut text) in &mut parts {
+    for (part, mut text, mut color) in &mut parts {
         text.0 = match part {
-            CityPanelPart::Name => data.name.to_uppercase(),
+            CityPanelPart::Name => data.name.to_owned(),
             CityPanelPart::Subtitle => {
                 let exonym = data.exonym.map_or_else(String::new, |e| format!("{e}  ·  "));
                 format!("{exonym}{}  ·  {}", data.line_type.label(), city.code())
@@ -843,12 +847,16 @@ pub fn refresh_city_panel(
                 .join("\n"),
             CityPanelPart::Stamped => match stamp {
                 Some(stamp) => {
-                    format!("STAMPED - THE {} STATION IN THIS PASSPORT", ordinal(stamp.order))
-                        .to_uppercase()
+                    format!("Stamped - the {} station in this passport", ordinal(stamp.order))
                 }
-                None => "NOT YET VISITED - BUY A TICKET THROUGH HERE".to_owned(),
+                None => "Not yet visited - buy a ticket through here".to_owned(),
             },
         };
+
+        // The one line whose colour carries the station's state.
+        if matches!(part, CityPanelPart::Stamped) {
+            color.0 = if stamp.is_some() { theme::VISITED } else { theme::INK_SOFT };
+        }
     }
 }
 
@@ -889,7 +897,7 @@ pub fn refresh_passport(
 
     if let Ok(mut text) = counter.single_mut() {
         text.0 =
-            format!("VISITED CITIES  {} / {}", passport.visited_count(), passport.total_cities());
+            format!("Visited cities  {} / {}", passport.visited_count(), passport.total_cities());
     }
     if let Ok(mut node) = fill.single_mut() {
         node.width = Val::Percent(passport.completion() * 100.0);
@@ -935,23 +943,19 @@ pub fn refresh_passport(
     for (StampCard(city), mut background, mut border) in &mut cards {
         let earned = passport.is_stamped(*city);
         background.0 = if earned { theme::PAPER } else { theme::PAPER_DEEP };
-        *border = BorderColor::all(if earned {
-            theme::STAMP_RED.with_alpha(0.85)
-        } else {
-            theme::INK_FAINT.with_alpha(0.55)
-        });
+        *border = BorderColor::all(if earned { theme::VISITED } else { theme::BORDER });
     }
     for (StampCardCode(city), mut color) in &mut codes {
-        color.0 = if passport.is_stamped(*city) { theme::STAMP_RED } else { theme::INK_FAINT };
+        color.0 = if passport.is_stamped(*city) { theme::VISITED } else { theme::INK_FAINT };
     }
     for (StampCardOrder(city), mut text, mut color) in &mut orders {
         match passport.stamp_for(*city) {
             Some(stamp) => {
-                text.0 = format!("No. {}", stamp.order);
+                text.0 = stamp.order.to_string();
                 color.0 = theme::INK_SOFT;
             }
             None => {
-                text.0 = "-".to_owned();
+                text.0 = String::new();
                 color.0 = theme::INK_FAINT;
             }
         }
@@ -997,7 +1001,7 @@ pub fn run_stamp_flash(
             continue;
         }
         let strength = flash.remaining / StampFlash::DURATION;
-        background.0 = theme::PAPER.mix(&theme::BRASS, strength * 0.8);
+        background.0 = theme::PAPER.mix(&theme::VISITED, strength * 0.8);
         // Overshoot once, then settle - the press of the stamp coming down.
         transform.scale = Vec2::splat(1.0 + strength * strength * 0.16);
         transform.rotation = Rot2::degrees(card_tilt(*city) * (1.0 + strength * 0.9));

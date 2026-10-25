@@ -143,7 +143,7 @@ impl Plugin for PresentationPlugin {
                 require_markers: false,
                 picking_mode: SpritePickingMode::BoundingBox,
             })
-            .add_systems(Startup, (map::spawn_map, ui::build_ui))
+            .add_systems(Startup, (map::spawn_map, map::spawn_water, ui::build_ui))
             .add_systems(
                 Update,
                 (
@@ -166,6 +166,7 @@ impl Plugin for PresentationPlugin {
                 // that marks a place on it.
                 (
                     map::draw_country,
+                    map::draw_shorelines,
                     map::draw_furniture,
                     map::draw_network,
                     map::draw_station_rings,
