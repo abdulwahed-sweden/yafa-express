@@ -1,0 +1,12 @@
+[package]
+name = "yafa_core"
+description = "Engine-agnostic domain model for Yafa Express: rail network graph, routing, journeys and the passport."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

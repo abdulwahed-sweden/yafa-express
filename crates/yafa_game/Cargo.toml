@@ -1,0 +1,22 @@
+[package]
+name = "yafa_game"
+description = "Yafa Express - a 2D top-down train simulation across the historical railways of Palestine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "yafa-express"
+path = "src/main.rs"
+
+[dependencies]
+yafa_core = { workspace = true }
+
+# 2D + UI only: the 3D render stack, audio, glTF and animation are not used here
+# and skipping them keeps the build an order of magnitude cheaper.
+[dependencies.bevy]
+version = "0.20"
+default-features = false
+features = ["2d", "ui", "bevy_gizmos", "bevy_gizmos_render", "png"]

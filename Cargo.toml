@@ -1,0 +1,29 @@
+[workspace]
+resolver = "3"
+members = ["crates/yafa_core", "crates/yafa_game"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"  # Bevy 0.20's minimum
+license = "MIT"
+repository = "https://github.com/abdulwahedmansour/yafa-express"
+
+[workspace.dependencies]
+yafa_core = { path = "crates/yafa_core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Debug builds of a Bevy app are unusably slow unless dependencies are optimised.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+# Thin LTO is most of the win for a fraction of the cost. `codegen-units = 1`
+# buys very little on top of it here and makes a cold release build take the
+# better part of an hour on a four-core machine.
+lto = "thin"
+panic = "abort"
