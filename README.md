@@ -83,7 +83,7 @@ crates/
     components.rs  components, messages, resources, states
     map.rs       projection, track drawing, the locomotive
     systems.rs   ticketing, movement, stamping, saving
-    ui.rs        ticket counter, station board, city panel, passport
+    ui.rs        header bar; the Ticket, Now, city and Passport cards
     theme.rs     palette, typefaces and shared chrome
     assets/fonts/  Plex Sans, Plex Sans Arabic and Plex Mono, compiled in
     tests/
@@ -137,60 +137,66 @@ does not.
 
 ## Design notes
 
+The map is the game, so the map gets the screen. A navy header bar runs across
+the top with the title and the passport count; under it the map fills
+everything, and one column of four cards stands down the right-hand side:
+
+```
+┌────────────────────────────────────────────────────────┐
+│ Yafa Express · يافا إكسبرس              Visited 3 / 11 │
+├──────────────────────────────────┬─────────────────────┤
+│                                  │ Ticket              │
+│                                  │   From · To · Depart│
+│                                  ├─────────────────────┤
+│          the map                 │ Now                 │
+│   (the map is the station list)  │   one line + bar    │
+│                                  ├─────────────────────┤
+│                                  │ the station in focus│
+│                                  ├─────────────────────┤
+│                                  │ Passport            │
+│                                  │   stamp chips       │
+└──────────────────────────────────┴─────────────────────┘
+```
+
+There is no second list of stations: you choose by clicking the map.
+
 One light page, one type family, flat colour. The only colour that carries
 meaning is the colour of a line or the state of a station.
 
 | Role | |
 | --- | --- |
 | Page / map ground | `#f7f5ef` |
-| Cards | `#ffffff` on a `#e3ded2` hairline |
+| Cards | `#ffffff` on a `#e3ded2` hairline, 12 px radius |
+| Header bar | `#16243a` |
+| Accent (Depart button, route in play) | `#1c8a84` |
 | Headings / primary text | `#16243a` / `#141d29` |
-| Muted | `#4b5563` |
 | Coastal Line / Mountain Line / Junction Links | `#1c8a84` / `#b8651f` / `#6b7482` |
-| Sea | `#d8efed` |
+| Sea | `#d8efed` flat |
 | Visited / not yet visited | `#1f8a4c` / `#9aa4b3` |
 
-### One family
+### Type
 
-IBM Plex Sans does all the lettering, with IBM Plex Sans Arabic behind it in
-every fallback chain so Arabic script is set in a face from the same design
-rather than in whatever the system offers. IBM Plex Mono is kept for figures -
-distances, times and station codes - where a fixed advance keeps columns
-aligned.
-
-The scale is five steps: 14 caption, 17 body, 18 station name, 20 heading, 28
-display. Nothing is tracked, and nothing is set in capitals except the
-three-letter station codes, which are codes rather than styling.
+IBM Plex Sans with IBM Plex Sans Arabic behind it in every fallback chain;
+IBM Plex Mono for figures. Five sizes: 15 caption, 17 body, 20 station name,
+22 heading, 30 display. Every station is named twice on the map - Arabic
+script first and large, the romanised name under it - and once on its stamp.
 
 Both families are compiled into the binary rather than loaded from a folder,
-so the executable runs from any working directory and can be copied anywhere
-without losing its lettering. They are under the SIL Open Font License; the
-licence sits beside them in `crates/yafa_game/assets/fonts`.
+so the executable runs from any working directory. They are under the SIL Open
+Font License; the licence sits beside them in `crates/yafa_game/assets/fonts`.
 
 ### The map
 
-Every mark on the map is a gizmo line, redrawn each frame:
-
-- **Track** is two running rails with sleepers between them, so it reads as
-  track rather than as a stroke. Surveyed-but-unbuilt track is a broken line.
-- **The sea, the lake and the Dead Sea** are flat fills. Gizmos draw lines and
-  not polygons, so a fill is an even-odd scanline a pixel apart - a few hundred
-  lines a frame, which costs nothing and saves carrying a mesh and a material
-  just to colour the sea. The sea's polygon is the shoreline closed off well
-  outside the frame, so the fill runs off every edge instead of stopping on a
-  visible seam.
-- **A graticule, a scale bar and a north arrow** give the sheet its structure.
-
-### Everything else
-
-- **Everything is in English.** Station names are romanised (Akka, Yafa,
-  Al-Quds), with the name used on European timetables alongside where it
-  differs.
-- **No art assets beyond the fonts.** The locomotive and every panel are built
-  from coloured rectangles and text. Junctions are diamonds and through
-  stations are squares, which is the convention a printed railway map uses.
-- **Stamps land crooked.** Each passport card carries a small fixed tilt, and
-  presses in and settles when the station is first collected.
+- **Track** is one solid line, 5 px wide, in its corridor's colour. The route
+  the ticket buys, or the train is running, gets a wider accent line over it.
+  Surveyed-but-unbuilt track is the same line, broken.
+- **Stations** are round discs - a navy ring with the corridor colour inside -
+  with a 36 px click target. A green ring means stamped; a green or amber
+  ring means it is on the ticket.
+- **The sea, the lake and the Dead Sea** are flat fills with a thin shoreline.
+  No graticule, no compass; a small scale bar is the only furniture.
+- Gizmo lines come in three widths (water, track, route) through three gizmo
+  config groups, set once at startup in `lib.rs`.
 
 ## Requirements
 

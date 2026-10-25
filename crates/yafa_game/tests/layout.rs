@@ -86,9 +86,6 @@ fn there_is_one_marker_and_one_stamp_card_per_station() {
     let mut labels = app.world_mut().query::<&StationLabel>();
     assert_eq!(labels.iter(app.world()).count(), CITY_COUNT);
 
-    let mut rows = app.world_mut().query::<&StationRow>();
-    assert_eq!(rows.iter(app.world()).count(), CITY_COUNT);
-
     let mut cards = app.world_mut().query::<&StampCard>();
     assert_eq!(cards.iter(app.world()).count(), CITY_COUNT);
 

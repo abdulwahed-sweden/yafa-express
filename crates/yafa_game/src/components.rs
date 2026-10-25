@@ -55,7 +55,7 @@ impl PassportBook {
     }
 }
 
-/// The station whose history is showing in the "About the City" panel.
+/// The station whose history is showing in the city card.
 #[derive(Resource, Default)]
 pub struct Focus(pub Option<CityId>);
 
@@ -184,10 +184,6 @@ pub enum UiAction {
     ShowCity(CityId),
 }
 
-/// A row in the station list, so it can be restyled as the ticket changes.
-#[derive(Component, Clone, Copy)]
-pub struct StationRow(pub CityId);
-
 /// The ticket's "From" / "To" boxes.
 #[derive(Component, Clone, Copy)]
 pub enum TicketSlot {
@@ -289,11 +285,6 @@ impl Default for StampFlash {
 #[derive(Message, Debug, Clone, Copy)]
 pub struct ActionRequested(pub UiAction);
 
-/// The status note at the right-hand end of a station list row ("FROM", "TO",
-/// or the stamp tick).
-#[derive(Component, Clone, Copy)]
-pub struct StationRowNote(pub CityId);
-
-/// The telegraph code printed on a passport stamp card.
+/// The name printed on a passport stamp chip - the part that turns green.
 #[derive(Component, Clone, Copy)]
 pub struct StampCardCode(pub CityId);

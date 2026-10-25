@@ -143,7 +143,18 @@ impl Plugin for PresentationPlugin {
                 require_markers: false,
                 picking_mode: SpritePickingMode::BoundingBox,
             })
-            .add_systems(Startup, (map::spawn_map, map::spawn_water, ui::build_ui))
+            .init_gizmo_group::<map::TrackGizmos>()
+            .init_gizmo_group::<map::RouteGizmos>()
+            .add_systems(
+                Startup,
+                (
+                    configure_gizmo_widths,
+                    map::spawn_map,
+                    map::spawn_water,
+                    map::spawn_station_discs,
+                    ui::build_ui,
+                ),
+            )
             .add_systems(
                 Update,
                 (
@@ -165,7 +176,6 @@ impl Plugin for PresentationPlugin {
                 // The country first, then the track over it, then everything
                 // that marks a place on it.
                 (
-                    map::draw_country,
                     map::draw_shorelines,
                     map::draw_furniture,
                     map::draw_network,
@@ -176,6 +186,14 @@ impl Plugin for PresentationPlugin {
                     .in_set(GameSet::Present),
             );
     }
+}
+
+/// Three line widths: thin for water and rings, thick for track, thicker for
+/// the route in play. Gizmo width is a per-group setting, hence the groups.
+fn configure_gizmo_widths(mut store: ResMut<GizmoConfigStore>) {
+    store.config_mut::<DefaultGizmoConfigGroup>().0.line.width = map::THIN_WIDTH;
+    store.config_mut::<map::TrackGizmos>().0.line.width = map::TRACK_WIDTH;
+    store.config_mut::<map::RouteGizmos>().0.line.width = map::ROUTE_WIDTH;
 }
 
 /// The whole game.

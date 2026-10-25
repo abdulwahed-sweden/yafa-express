@@ -1,16 +1,18 @@
 //! The map view: projecting the country onto the screen, drawing its water and
 //! its track, and the locomotive that runs over it.
 //!
-//! The linework - track, shorelines, the graticule, the scale bar - is gizmos,
-//! redrawn each frame for nothing. The water is meshes, built once: 2D gizmos
-//! are sorted last whatever their depth, so a fill drawn with them would cover
-//! every station marker and label standing on it.
+//! The linework - track, shorelines, the scale bar - is gizmos, redrawn each
+//! frame for nothing, in three widths: thin for water, thick for track, and
+//! thicker still for the route in play. The water and the station discs are
+//! meshes, built once: 2D gizmos are sorted last whatever their depth, so a
+//! fill drawn with them would cover every label standing on it.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::sprite_render::ColorMaterial;
+use bevy::text::TextSpan;
 use yafa_core::{CityId, GeoPoint, LineType, Network, Opening, coast};
 
 use crate::components::*;
@@ -21,24 +23,35 @@ use crate::theme::{self, Fonts};
 /// Chosen so the whole network - 162 km from Akka down to Ghazzah - clears the
 /// title above it and the station board below it. The water runs off the edges,
 /// as it does on any printed sheet.
-const PX_PER_KM: f32 = 2.82;
-/// Where the centre of the network sits on screen, in pixels. Nudged left of
-/// centre into the gap between the two columns of panels, and up to clear the
-/// station board.
-const MAP_OFFSET: Vec2 = Vec2::new(-15.0, 81.5);
+const PX_PER_KM: f32 = 3.6;
+/// Where the centre of the network sits on screen, in pixels: left of centre,
+/// in the space the single column of cards leaves free, and a little below the
+/// header bar.
+const MAP_OFFSET: Vec2 = Vec2::new(-175.0, -22.0);
 
-/// Half the gauge, in pixels: how far each running rail sits from the centre
-/// line of the track.
-const RAIL_GAUGE: f32 = 1.9;
-/// Pixels between sleepers.
-const SLEEPER_SPACING: f32 = 10.0;
-/// Half-length of a sleeper, in pixels.
-const SLEEPER_REACH: f32 = 3.4;
+/// Width of built track, in pixels.
+pub const TRACK_WIDTH: f32 = 5.0;
+/// Width of the route the ticket buys, or the train is running.
+pub const ROUTE_WIDTH: f32 = 9.0;
+/// Width of shorelines and rings.
+pub const THIN_WIDTH: f32 = 2.0;
 
-/// Radius of a station marker, in pixels.
-const STATION_SIZE: f32 = 8.0;
+/// Radius of a station disc, in pixels.
+const STATION_SIZE: f32 = 9.0;
 /// Size of the invisible pad that catches clicks on a station.
-const STATION_HIT: f32 = 26.0;
+const STATION_HIT: f32 = 36.0;
+/// Depth of the station discs: over the water and the track, under the labels.
+const STATION_Z: f32 = 5.0;
+
+/// Gizmo group for built track: a solid line wide enough to read as a line.
+#[derive(Default, Reflect, GizmoConfigGroup)]
+#[reflect(Default)]
+pub struct TrackGizmos;
+
+/// Gizmo group for the route in play, wider still.
+#[derive(Default, Reflect, GizmoConfigGroup)]
+#[reflect(Default)]
+pub struct RouteGizmos;
 
 /// How far west of the frame the sea polygon is closed off, in pixels. The
 /// window is 1280 logical pixels wide with the camera at its centre, so this
@@ -85,52 +98,35 @@ pub fn spawn_map(mut commands: Commands, rail: Res<Rail>, view: Res<MapView>, fo
     for city in CityId::ALL {
         let data = rail.city(city);
         let at = view.world(rail.position(city));
-        let junction = data.line_type == LineType::Junction;
 
-        // Junctions are drawn as diamonds, through stations as squares - the
-        // same convention a printed railway map would use.
-        let rotation = if junction {
-            Quat::from_rotation_z(std::f32::consts::FRAC_PI_4)
-        } else {
-            Quat::IDENTITY
-        };
-        let size = if junction { STATION_SIZE * 1.15 } else { STATION_SIZE };
-
+        // A transparent pad, larger than the disc, so stations are comfortable
+        // to click. The disc itself is a mesh, spawned by `spawn_station_discs`
+        // where the renderer's asset stores are available.
         commands
             .spawn((
                 StationDot(city),
-                // A transparent pad, larger than the marker, so stations are
-                // comfortable to click. The marker itself is a child.
                 Sprite::from_color(Color::NONE, Vec2::splat(STATION_HIT)),
-                Transform::from_translation(at.extend(5.0)),
+                Transform::from_translation(at.extend(STATION_Z)),
                 Pickable::default(),
                 Name::new(data.name),
-                children![
-                    (
-                        Sprite::from_color(theme::MAP_INK, Vec2::splat(size)),
-                        Transform::from_rotation(rotation).with_translation(Vec3::Z * 0.2),
-                        Pickable::IGNORE,
-                    ),
-                    (
-                        Sprite::from_color(
-                            theme::line_color(data.line_type),
-                            Vec2::splat(size - 3.4)
-                        ),
-                        Transform::from_rotation(rotation).with_translation(Vec3::Z * 0.3),
-                        Pickable::IGNORE,
-                    ),
-                ],
             ))
             .with_child((
                 StationLabel(city),
-                Text2d::new(data.name.to_owned()),
-                fonts.sign(theme::SIGN),
+                // Arabic first, large; the romanised name under it, smaller.
+                Text2d::new(data.arabic.to_owned()),
+                fonts.sign_bold(theme::SIGN),
                 TextColor(theme::MAP_INK),
+                label_justify(data.line_type),
                 // Coastal names are set out over the sea, inland names over the
                 // hills, so neither crowds the track between them.
                 label_anchor(data.line_type),
                 Transform::from_translation(label_offset(data.line_type).extend(6.0)),
                 Pickable::IGNORE,
+                children![(
+                    TextSpan::new(format!("\n{}", data.name)),
+                    fonts.prose(theme::CAPTION),
+                    TextColor(theme::INK_SOFT),
+                )],
             ));
     }
 
@@ -144,10 +140,60 @@ fn label_anchor(line: LineType) -> Anchor {
     }
 }
 
+fn label_justify(line: LineType) -> TextLayout {
+    TextLayout::justify(match line {
+        LineType::Coastal => Justify::Right,
+        _ => Justify::Left,
+    })
+}
+
 fn label_offset(line: LineType) -> Vec2 {
     match line {
-        LineType::Coastal => Vec2::new(-11.0, 0.0),
-        _ => Vec2::new(11.0, 0.0),
+        LineType::Coastal => Vec2::new(-(STATION_SIZE + 8.0), 0.0),
+        _ => Vec2::new(STATION_SIZE + 8.0, 0.0),
+    }
+}
+
+/// The station discs: a navy ring with the corridor colour inside.
+///
+/// Meshes rather than sprites so they are round, and kept apart from
+/// [`spawn_map`] for the same reason as the water: the headless tests have no
+/// asset stores.
+pub fn spawn_station_discs(
+    mut commands: Commands,
+    rail: Res<Rail>,
+    view: Res<MapView>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let outer = meshes.add(Circle::new(STATION_SIZE));
+    let inner = meshes.add(Circle::new(STATION_SIZE - 3.0));
+    let ring = materials.add(ColorMaterial::from_color(theme::MAP_INK));
+    let fills: Vec<_> = LineType::ALL
+        .iter()
+        .map(|&line| (line, materials.add(ColorMaterial::from_color(theme::line_color(line)))))
+        .collect();
+
+    for city in CityId::ALL {
+        let data = rail.city(city);
+        let at = view.world(rail.position(city));
+        let fill = fills
+            .iter()
+            .find(|(line, _)| *line == data.line_type)
+            .map(|(_, m)| m.clone())
+            .expect("every corridor has a material");
+        commands.spawn((
+            Mesh2d(outer.clone()),
+            MeshMaterial2d(ring.clone()),
+            Transform::from_translation(at.extend(STATION_Z + 0.1)),
+            Pickable::IGNORE,
+        ));
+        commands.spawn((
+            Mesh2d(inner.clone()),
+            MeshMaterial2d(fill),
+            Transform::from_translation(at.extend(STATION_Z + 0.2)),
+            Pickable::IGNORE,
+        ));
     }
 }
 
@@ -169,7 +215,7 @@ fn water_names(commands: &mut Commands, view: &MapView, fonts: &Fonts) {
     name(
         "The Mediterranean",
         view.screen(GeoPoint::new(32.30, 34.26)),
-        theme::HEADING,
+        theme::SIGN,
         1.19,
         Vec2::ZERO,
     );
@@ -202,7 +248,9 @@ fn spawn_train(commands: &mut Commands) {
 
     commands.spawn((
         Train,
-        Transform::from_translation(Vec3::new(0.0, 0.0, 20.0)),
+        // Scaled up once here; the movement system writes translation and
+        // rotation only, so the scale stays.
+        Transform::from_translation(Vec3::new(0.0, 0.0, 20.0)).with_scale(Vec3::splat(1.5)),
         Visibility::Hidden,
         Name::new("Locomotive"),
         children![
@@ -237,12 +285,6 @@ fn spawn_train(commands: &mut Commands) {
 }
 
 // --- The country ----------------------------------------------------------
-
-/// Draws the graticule. The water itself is geometry, not gizmos - see
-/// [`spawn_water`].
-pub fn draw_country(mut gizmos: Gizmos, view: Res<MapView>) {
-    graticule(&mut gizmos, &view);
-}
 
 /// Builds the sea, the lake and the Dead Sea as meshes, once.
 ///
@@ -356,24 +398,6 @@ pub fn draw_shorelines(mut gizmos: Gizmos, view: Res<MapView>) {
     polyline(&mut gizmos, &jordan, theme::SEA_INK);
 }
 
-/// The faint grid of whole and half degrees, which reads as the ruling of the
-/// sheet rather than as information.
-fn graticule(gizmos: &mut Gizmos, view: &MapView) {
-    const LATS: [f64; 5] = [31.0, 31.5, 32.0, 32.5, 33.0];
-    const LONS: [f64; 4] = [34.0, 34.5, 35.0, 35.5];
-
-    for lat in LATS {
-        let a = view.screen(GeoPoint::new(lat, 33.6));
-        let b = view.screen(GeoPoint::new(lat, 36.2));
-        gizmos.line_2d(a, b, theme::GRATICULE);
-    }
-    for lon in LONS {
-        let a = view.screen(GeoPoint::new(30.8, lon));
-        let b = view.screen(GeoPoint::new(33.4, lon));
-        gizmos.line_2d(a, b, theme::GRATICULE);
-    }
-}
-
 fn closed_polyline(gizmos: &mut Gizmos, ring: &[Vec2], color: Color) {
     polyline(gizmos, ring, color);
     if let (Some(first), Some(last)) = (ring.first(), ring.last()) {
@@ -389,10 +413,12 @@ fn polyline(gizmos: &mut Gizmos, points: &[Vec2], color: Color) {
 
 // --- The network ----------------------------------------------------------
 
-/// Draws the whole network: built track as rails and sleepers, surveyed but
-/// unbuilt track as a broken line.
+/// Draws the whole network: built track as one solid line in its corridor's
+/// colour, surveyed-but-unbuilt track as a broken line, and the route in play
+/// as a wider line in the accent over the top.
 pub fn draw_network(
-    mut gizmos: Gizmos,
+    mut track: Gizmos<TrackGizmos>,
+    mut route: Gizmos<RouteGizmos>,
     rail: Res<Rail>,
     view: Res<MapView>,
     desk: Res<Desk>,
@@ -405,12 +431,20 @@ pub fn draw_network(
         let a = view.world(rail.position(segment.from));
         let b = view.world(rail.position(segment.to));
         let lit = highlighted.contains(&segment.id.0);
-        let color =
-            if lit { theme::line_color(segment.line) } else { theme::line_color_dim(segment.line) };
+        // Everything off the route is lightened a little, so the route reads
+        // first; nothing drops to grey, so the corridors stay tellable apart.
+        let color = if lit || highlighted.is_empty() {
+            theme::line_color(segment.line)
+        } else {
+            theme::line_color(segment.line).mix(&theme::DESK, 0.45)
+        };
 
         match segment.opening {
-            Opening::Opened(_) => draw_track(&mut gizmos, a, b, color, lit),
-            Opening::Projected => draw_dashed(&mut gizmos, a, b, color),
+            Opening::Opened(_) => track.line_2d(a, b, color),
+            Opening::Projected => draw_dashed(&mut track, a, b, color),
+        }
+        if lit {
+            route.line_2d(a, b, theme::ACCENT.with_alpha(0.55));
         }
     }
 }
@@ -425,37 +459,10 @@ fn active_segments(rail: &Rail, desk: &Desk, run: Option<&TrainRun>) -> Vec<usiz
         .unwrap_or_default()
 }
 
-/// Two running rails with sleepers between them.
-fn draw_track(gizmos: &mut Gizmos, a: Vec2, b: Vec2, color: Color, lit: bool) {
-    let along = b - a;
-    let length = along.length();
-    if length < f32::EPSILON {
-        return;
-    }
-    let dir = along / length;
-    let side = Vec2::new(-dir.y, dir.x);
-
-    // The ballast: a wash under the rails, so lit track reads as a solid line.
-    if lit {
-        gizmos.line_2d(a, b, color.with_alpha(0.5));
-    }
-
-    let offset = side * RAIL_GAUGE;
-    gizmos.line_2d(a + offset, b + offset, color);
-    gizmos.line_2d(a - offset, b - offset, color);
-
-    let sleeper_color = color.with_alpha(if lit { 0.75 } else { 0.35 });
-    let count = (length / SLEEPER_SPACING) as usize;
-    for i in 1..count {
-        let at = a + dir * (i as f32 * SLEEPER_SPACING);
-        gizmos.line_2d(at + side * SLEEPER_REACH, at - side * SLEEPER_REACH, sleeper_color);
-    }
-}
-
 /// A broken line, for track that was surveyed but never laid.
-fn draw_dashed(gizmos: &mut Gizmos, a: Vec2, b: Vec2, color: Color) {
-    const DASH: f32 = 7.0;
-    const GAP: f32 = 6.0;
+fn draw_dashed(gizmos: &mut Gizmos<TrackGizmos>, a: Vec2, b: Vec2, color: Color) {
+    const DASH: f32 = 12.0;
+    const GAP: f32 = 9.0;
 
     let along = b - a;
     let length = along.length();
@@ -491,17 +498,17 @@ pub fn draw_station_rings(
         let at = view.world(rail.position(city));
 
         if book.passport.is_stamped(city) {
-            gizmos.circle_2d(at, STATION_SIZE + 3.5, theme::VISITED.with_alpha(0.85));
+            gizmos.circle_2d(at, STATION_SIZE + 4.0, theme::VISITED);
         }
         if desk.origin == Some(city) {
-            gizmos.circle_2d(at, STATION_SIZE + 7.0, theme::VISITED);
+            gizmos.circle_2d(at, STATION_SIZE + 8.0, theme::VISITED);
         }
         if desk.destination == Some(city) {
-            gizmos.circle_2d(at, STATION_SIZE + 7.0, theme::PENDING);
+            gizmos.circle_2d(at, STATION_SIZE + 8.0, theme::PENDING);
         }
         if focus.0 == Some(city) {
-            let radius = STATION_SIZE + 10.0 + pulse * 3.0;
-            gizmos.circle_2d(at, radius, theme::MAP_INK.with_alpha(0.25 + pulse * 0.4));
+            let radius = STATION_SIZE + 12.0 + pulse * 3.0;
+            gizmos.circle_2d(at, radius, theme::MAP_INK.with_alpha(0.2 + pulse * 0.35));
         }
     }
 }
@@ -538,13 +545,12 @@ pub fn draw_steam(
 
 // --- Furniture ------------------------------------------------------------
 
-/// Where the scale bar and compass sit: open water off the coast, clear of
-/// both the panels and the station board that lies over the map's south.
-const FURNITURE_ANCHOR: GeoPoint = GeoPoint::new(31.95, 34.08);
+/// Where the scale bar sits: open water off the coast, below the sea's name.
+const FURNITURE_ANCHOR: GeoPoint = GeoPoint::new(31.75, 34.10);
 /// Ground distance the bar measures, in kilometres.
 const SCALE_KM: f32 = 50.0;
 
-/// The scale bar and the north arrow.
+/// The scale bar.
 pub fn draw_furniture(mut gizmos: Gizmos, view: Res<MapView>) {
     let origin = view.screen(FURNITURE_ANCHOR);
     let length = SCALE_KM * view.px_per_km;
@@ -557,16 +563,10 @@ pub fn draw_furniture(mut gizmos: Gizmos, view: Res<MapView>) {
         gizmos.line_2d(at, at + Vec2::Y * 5.0, ink);
     }
 
-    // North arrow, standing above the bar.
-    let base = origin + Vec2::new(length * 0.5, 26.0);
-    let tip = base + Vec2::Y * 17.0;
-    gizmos.line_2d(base, tip, ink);
-    gizmos.line_2d(tip, tip + Vec2::new(-4.5, -6.0), ink);
-    gizmos.line_2d(tip, tip + Vec2::new(4.5, -6.0), ink);
 }
 
-/// The figures printed against the scale bar and the arrow. Static, because
-/// they never change once the projection is fixed.
+/// The figures printed against the scale bar. Static, because they never
+/// change once the projection is fixed.
 fn scale_bar_figures(commands: &mut Commands, view: &MapView, fonts: &Fonts) {
     let origin = view.screen(FURNITURE_ANCHOR);
     let length = SCALE_KM * view.px_per_km;
@@ -590,5 +590,4 @@ fn scale_bar_figures(commands: &mut Commands, view: &MapView, fonts: &Fonts) {
         theme::CAPTION,
         Vec2::ZERO,
     );
-    figure("N".to_owned(), origin + Vec2::new(length * 0.5, 56.0), theme::CAPTION, Vec2::ZERO);
 }

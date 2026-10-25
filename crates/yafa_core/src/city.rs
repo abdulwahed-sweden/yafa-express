@@ -143,6 +143,8 @@ pub struct City {
     pub id: CityId,
     /// Romanised Arabic name, as it is printed on the ticket.
     pub name: &'static str,
+    /// The name in Arabic script, printed beside it on the map and the stamps.
+    pub arabic: &'static str,
     /// The name the station carried on European timetables, where it differs.
     pub exonym: Option<&'static str>,
     /// Real-world position, projected for the map view.
@@ -158,6 +160,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
     City {
         id: CityId::Akka,
         name: "Akka",
+        arabic: "عكا",
         exonym: Some("Acre"),
         coordinates: GeoPoint::new(32.928, 35.082),
         line_type: LineType::Coastal,
@@ -167,6 +170,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
     City {
         id: CityId::Haifa,
         name: "Haifa",
+        arabic: "حيفا",
         exonym: None,
         coordinates: GeoPoint::new(32.818, 34.989),
         line_type: LineType::Coastal,
@@ -176,6 +180,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
     City {
         id: CityId::Safad,
         name: "Safad",
+        arabic: "صفد",
         exonym: Some("Safed"),
         coordinates: GeoPoint::new(32.965, 35.497),
         line_type: LineType::Mountain,
@@ -185,6 +190,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
     City {
         id: CityId::Beisan,
         name: "Beisan",
+        arabic: "بيسان",
         exonym: Some("Beth Shean"),
         coordinates: GeoPoint::new(32.497, 35.500),
         line_type: LineType::Mountain,
@@ -194,6 +200,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
     City {
         id: CityId::Tulkarm,
         name: "Tulkarm",
+        arabic: "طولكرم",
         exonym: None,
         coordinates: GeoPoint::new(32.310, 35.028),
         line_type: LineType::Junction,
@@ -203,6 +210,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
     City {
         id: CityId::Nablus,
         name: "Nablus",
+        arabic: "نابلس",
         exonym: None,
         coordinates: GeoPoint::new(32.221, 35.254),
         line_type: LineType::Mountain,
@@ -212,6 +220,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
     City {
         id: CityId::Yafa,
         name: "Yafa",
+        arabic: "يافا",
         exonym: Some("Jaffa"),
         coordinates: GeoPoint::new(32.054, 34.752),
         line_type: LineType::Coastal,
@@ -221,6 +230,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
     City {
         id: CityId::AlLadd,
         name: "Al-Ladd",
+        arabic: "اللد",
         exonym: Some("Lydda"),
         coordinates: GeoPoint::new(31.951, 34.896),
         line_type: LineType::Junction,
@@ -230,6 +240,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
     City {
         id: CityId::AlQuds,
         name: "Al-Quds",
+        arabic: "القدس",
         exonym: Some("Jerusalem"),
         coordinates: GeoPoint::new(31.783, 35.217),
         line_type: LineType::Mountain,
@@ -239,6 +250,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
     City {
         id: CityId::AlKhalil,
         name: "Al-Khalil",
+        arabic: "الخليل",
         exonym: Some("Hebron"),
         coordinates: GeoPoint::new(31.529, 35.098),
         line_type: LineType::Mountain,
@@ -248,6 +260,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
     City {
         id: CityId::Ghazzah,
         name: "Ghazzah",
+        arabic: "غزة",
         exonym: Some("Gaza"),
         coordinates: GeoPoint::new(31.504, 34.466),
         line_type: LineType::Coastal,
@@ -279,6 +292,14 @@ mod tests {
             let before = names.len();
             names.dedup();
             assert_eq!(names.len(), before, "duplicate identifier");
+        }
+    }
+
+    #[test]
+    fn every_station_has_an_arabic_name() {
+        for city in CITIES.iter() {
+            assert!(!city.arabic.is_empty(), "{} has no Arabic name", city.name);
+            assert!(city.arabic.chars().all(|c| !c.is_ascii_alphabetic()), "{}", city.name);
         }
     }
 

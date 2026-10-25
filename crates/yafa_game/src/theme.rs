@@ -32,8 +32,6 @@ pub const SEA_FILL: Color = Color::srgb_u8(0xD8, 0xEF, 0xED);
 /// Lettering set on the water. The shoreline stroke is far too pale to read
 /// against the fill it bounds, so names take a darker tone of the same teal.
 pub const SEA_LABEL: Color = Color::srgb_u8(0x2F, 0x7D, 0x78);
-/// The faint grid of latitude and longitude.
-pub const GRATICULE: Color = Color::srgba(0.086, 0.141, 0.227, 0.07);
 /// Lettering on the map itself.
 pub const MAP_INK: Color = Color::srgb_u8(0x16, 0x24, 0x3A);
 
@@ -56,6 +54,17 @@ pub const INK: Color = Color::srgb_u8(0x14, 0x1D, 0x29);
 pub const INK_SOFT: Color = Color::srgb_u8(0x4B, 0x55, 0x63);
 /// A station not yet visited, and anything else not yet earned.
 pub const INK_FAINT: Color = Color::srgb_u8(0x9A, 0xA4, 0xB3);
+
+// --- Accents --------------------------------------------------------------
+
+/// The one accent: the header bar's teal, the primary button, the lit route.
+pub const ACCENT: Color = Color::srgb_u8(0x1C, 0x8A, 0x84);
+/// Text on the accent.
+pub const ON_ACCENT: Color = Color::srgb_u8(0xFF, 0xFF, 0xFF);
+/// The header bar.
+pub const HEADER_BAR: Color = Color::srgb_u8(0x16, 0x24, 0x3A);
+/// Text on the header bar.
+pub const ON_HEADER: Color = Color::srgb_u8(0xF7, 0xF5, 0xEF);
 
 // --- State ----------------------------------------------------------------
 
@@ -98,12 +107,12 @@ pub fn line_color_dim(line: LineType) -> Color {
 
 // --- Type scale -----------------------------------------------------------
 
-pub const CAPTION: f32 = 14.0;
+pub const CAPTION: f32 = 15.0;
 pub const BODY: f32 = 17.0;
-/// Station names, in the list and on the map.
-pub const SIGN: f32 = 18.0;
-pub const HEADING: f32 = 20.0;
-pub const DISPLAY: f32 = 28.0;
+/// Station names on the map and in the passport.
+pub const SIGN: f32 = 20.0;
+pub const HEADING: f32 = 22.0;
+pub const DISPLAY: f32 = 30.0;
 
 // --- Typefaces ------------------------------------------------------------
 
@@ -216,7 +225,7 @@ pub fn panel_node() -> Node {
         flex_direction: FlexDirection::Column,
         padding: UiRect::all(Val::Px(16.0)),
         border: UiRect::all(Val::Px(1.0)),
-        border_radius: BorderRadius::all(Val::Px(6.0)),
+        border_radius: BorderRadius::all(Val::Px(12.0)),
         row_gap: Val::Px(8.0),
         ..default()
     }
@@ -232,12 +241,16 @@ pub fn panel_chrome() -> impl Bundle {
     )
 }
 
-/// The heading of a card: a title in sentence case over its subtitle.
+/// The heading of a card: one title, one line. Subtitles are gone; a card
+/// that needs a sentence to explain itself has the wrong title.
 pub fn panel_header(fonts: &Fonts, title: &str, subtitle: &str) -> impl Bundle {
+    // `subtitle` is kept in the signature so callers do not change; an empty
+    // string spawns nothing visible.
     (
         Node {
-            flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(2.0),
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Baseline,
+            column_gap: Val::Px(10.0),
             margin: UiRect::bottom(Val::Px(2.0)),
             ..default()
         },
@@ -252,7 +265,7 @@ pub fn panel_header(fonts: &Fonts, title: &str, subtitle: &str) -> impl Bundle {
             (
                 Text::new(subtitle.to_owned()),
                 fonts.prose(CAPTION),
-                TextColor(INK_SOFT),
+                TextColor(INK_FAINT),
                 Pickable::IGNORE,
             ),
         ],
