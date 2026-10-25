@@ -67,7 +67,10 @@ pub struct Announcer {
 
 impl Announcer {
     /// How many announcements the board holds before the oldest scrolls off.
-    const CAPACITY: usize = 4;
+    ///
+    /// Kept short on purpose: the board sits over the south of the map, and
+    /// every line it grows is a line of coast it hides.
+    const CAPACITY: usize = 3;
 
     pub fn say(&mut self, line: impl Into<String>) {
         self.lines.push_front(line.into());
@@ -246,6 +249,10 @@ pub struct PassportLines;
 /// The lifetime odometer line.
 #[derive(Component)]
 pub struct PassportOdometer;
+
+/// The list of stations still waiting for a stamp.
+#[derive(Component)]
+pub struct PassportRemaining;
 
 /// One stamp card in the passport grid.
 #[derive(Component, Clone, Copy)]

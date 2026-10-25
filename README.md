@@ -84,7 +84,8 @@ crates/
     map.rs       projection, track drawing, the locomotive
     systems.rs   ticketing, movement, stamping, saving
     ui.rs        ticket counter, station board, city panel, passport
-    theme.rs     palette and shared chrome
+    theme.rs     palette, typefaces and shared chrome
+    assets/fonts/  the three faces, compiled into the binary
     tests/
       journey.rs   whole journeys driven through the real ECS, headless
       layout.rs    the real interface spawned and refreshed, headless
@@ -136,15 +137,50 @@ does not.
 
 ## Design notes
 
+The look is a set of railway documents laid out on a dark desk: aged ticket
+paper, printing ink, brass fittings and a red stamp pad.
+
+### Three voices, three typefaces
+
+Typography does the organising, so the eye can tell a place from a measurement
+before it reads either.
+
+| Face | Used for |
+| --- | --- |
+| **Oswald** | Signage - station names, panel headings, the board's status line |
+| **IBM Plex Serif** | The printed page - history, explanations, anything in sentences |
+| **IBM Plex Mono** | The machine - codes, distances, times, announcements |
+
+All three are compiled into the binary rather than loaded from a folder, so the
+executable runs from any working directory and can be copied anywhere without
+losing its lettering. Both families are under the SIL Open Font License; the
+licences sit beside them in `crates/yafa_game/assets/fonts`.
+
+### The map is drawn, not filled
+
+Every mark on the map is a gizmo line, redrawn each frame:
+
+- **Track** is two running rails with sleepers between them, so it reads as
+  track rather than as a stroke. Surveyed-but-unbuilt track is a broken line.
+- **The sea** is the shoreline translated seaward seven times, fading as it
+  goes - the water lines an engraver would have cut around a coast. They are a
+  translation of the whole polyline rather than a per-segment offset, because a
+  translation cannot fold in on itself and per-segment offsets do, the moment
+  the coast turns concave. It turns concave at Haifa Bay.
+- **The lake and the Dead Sea** are ruled by an even-odd scanline fill, the way
+  a printed map shades water.
+- **A graticule, a scale bar and a north arrow** give the sheet its structure.
+
+### Everything else
+
 - **Everything is in English.** Station names are romanised (Akka, Yafa,
-  Al-Quds), with the name used on European timetables shown alongside where it
-  differs. Bevy's built-in font has no Arabic shaping, so romanisation is both
-  the project convention and the thing that actually renders.
-- **No art assets.** The map, the locomotive and every panel are drawn from
-  coloured rectangles, gizmo lines and text. Junctions are diamonds and through
+  Al-Quds), with the name used on European timetables alongside where it
+  differs.
+- **No art assets beyond the fonts.** The locomotive and every panel are built
+  from coloured rectangles and text. Junctions are diamonds and through
   stations are squares, which is the convention a printed railway map uses.
-- **The look** is a set of railway documents laid out on a dark desk: aged
-  ticket paper, printing ink, brass fittings and a red stamp pad.
+- **Stamps land crooked.** Each passport card carries a small fixed tilt, and
+  presses in and settles when the station is first collected.
 
 ## Requirements
 

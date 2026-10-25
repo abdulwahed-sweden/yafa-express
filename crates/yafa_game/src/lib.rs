@@ -45,6 +45,7 @@ use bevy::sprite::{SpritePickingMode, SpritePickingSettings};
 use yafa_core::{Network, Passport};
 
 use components::*;
+use theme::Fonts;
 
 /// Simulation runs first, then everything that only reads state to show it.
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -125,7 +126,16 @@ pub struct PresentationPlugin;
 
 impl Plugin for PresentationPlugin {
     fn build(&self, app: &mut App) {
-        app
+        // The faces are compiled into the binary, so this only needs somewhere
+        // to register them. `DefaultPlugins` is added before this plugin, so
+        // the store is already there; a headless app that skips it inserts
+        // `Fonts::builtin()` for itself instead.
+        let fonts = match app.world_mut().get_resource_mut::<Assets<Font>>() {
+            Some(mut assets) => Fonts::embedded(&mut assets),
+            None => Fonts::builtin(),
+        };
+
+        app.insert_resource(fonts)
             // Only entities that ask for it take part in picking, so the UI's
             // transparent containers never swallow a click meant for the map.
             .insert_resource(UiPickingSettings { require_markers: true })
@@ -152,7 +162,16 @@ impl Plugin for PresentationPlugin {
             )
             .add_systems(
                 Update,
-                (map::draw_network, map::draw_station_rings, map::draw_steam)
+                // The country first, then the track over it, then everything
+                // that marks a place on it.
+                (
+                    map::draw_country,
+                    map::draw_furniture,
+                    map::draw_network,
+                    map::draw_station_rings,
+                    map::draw_steam,
+                )
+                    .chain()
                     .in_set(GameSet::Present),
             );
     }

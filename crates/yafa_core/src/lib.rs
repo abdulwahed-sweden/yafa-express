@@ -38,6 +38,7 @@
 #![forbid(unsafe_code)]
 
 pub mod city;
+pub mod coast;
 pub mod geo;
 pub mod journey;
 pub mod network;

@@ -5,24 +5,33 @@
 //! systems copy state onto the widgets. Each widget is found by a marker
 //! component carrying the [`CityId`] it belongs to, so nothing has to keep an
 //! index into a list that might move.
+//!
+//! Typography does the organising. Station names are set in the condensed
+//! signage face, anything written in sentences in the serif, and every number,
+//! code and time in the monospace - so the eye can tell a place from a
+//! measurement before it reads either.
 
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
+use bevy::text::LineHeight;
 use bevy::ui::Pressed;
 use bevy::ui_widgets::Button;
 use yafa_core::{CityId, LineType, Network, Phase};
 
 use crate::components::*;
-use crate::theme;
+use crate::theme::{self, Fonts};
 
 const LEFT_WIDTH: f32 = 318.0;
 const RIGHT_WIDTH: f32 = 348.0;
 const BOARD_WIDTH: f32 = 520.0;
+/// Stamp cards, four to a row inside the passport.
+const CARD_WIDTH: f32 = 74.0;
+const CARD_HEIGHT: f32 = 48.0;
 
 // --- Construction ---------------------------------------------------------
 
 /// Lays out the whole interface.
-pub fn build_ui(mut commands: Commands, rail: Res<Rail>) {
+pub fn build_ui(mut commands: Commands, rail: Res<Rail>, fonts: Res<Fonts>) {
     commands
         .spawn((
             Node {
@@ -41,15 +50,15 @@ pub fn build_ui(mut commands: Commands, rail: Res<Rail>) {
             Name::new("Interface"),
         ))
         .with_children(|root| {
-            ticket_counter(root, &rail);
-            centre_column(root);
-            right_column(root, &rail);
+            ticket_counter(root, &rail, &fonts);
+            centre_column(root, &fonts);
+            right_column(root, &rail, &fonts);
         });
 }
 
 // --- Ticket counter -------------------------------------------------------
 
-fn ticket_counter(root: &mut ChildSpawnerCommands, rail: &Network) {
+fn ticket_counter(root: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
     root.spawn((
         Node { width: Val::Px(LEFT_WIDTH), flex_direction: FlexDirection::Column, ..default() },
         Pickable::IGNORE,
@@ -59,25 +68,29 @@ fn ticket_counter(root: &mut ChildSpawnerCommands, rail: &Network) {
             .spawn((Node { flex_grow: 1.0, ..theme::panel_node() }, theme::panel_chrome()))
             .with_children(|panel| {
                 panel.spawn(theme::panel_header(
+                    fonts,
                     "Ticket Counter",
                     "Choose where you board and where you are bound",
                 ));
-                ticket_stub(panel);
+                ticket_stub(panel, fonts);
+                panel.spawn(theme::perforation(34));
                 panel.spawn((
                     TicketRouteText,
                     Text::new("Select a departure station"),
-                    theme::text_font(theme::SIZE_SMALL),
+                    fonts.data(theme::SMALL),
                     TextColor(theme::INK_SOFT),
+                    LineHeight::RelativeToFont(1.45),
                     Pickable::IGNORE,
                 ));
-                control_row(panel);
-                station_list(panel, rail);
+                control_row(panel, fonts);
+                station_list(panel, rail, fonts);
+                keyboard_hints(panel, fonts);
             });
     });
 }
 
 /// The two boxes on the ticket itself.
-fn ticket_stub(panel: &mut ChildSpawnerCommands) {
+fn ticket_stub(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
     panel
         .spawn((
             Node {
@@ -89,12 +102,18 @@ fn ticket_stub(panel: &mut ChildSpawnerCommands) {
             Pickable::IGNORE,
         ))
         .with_children(|row| {
-            slot_box(row, "FROM", TicketSlot::Origin, theme::OLIVE);
-            slot_box(row, "TO", TicketSlot::Destination, theme::STAMP_RED);
+            slot_box(row, fonts, "FROM", TicketSlot::Origin, theme::OLIVE);
+            slot_box(row, fonts, "TO", TicketSlot::Destination, theme::STAMP_RED);
         });
 }
 
-fn slot_box(row: &mut ChildSpawnerCommands, caption: &str, slot: TicketSlot, accent: Color) {
+fn slot_box(
+    row: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
+    caption: &str,
+    slot: TicketSlot,
+    accent: Color,
+) {
     row.spawn((
         Node {
             flex_grow: 1.0,
@@ -102,7 +121,7 @@ fn slot_box(row: &mut ChildSpawnerCommands, caption: &str, slot: TicketSlot, acc
             flex_direction: FlexDirection::Column,
             padding: UiRect::axes(Val::Px(9.0), Val::Px(7.0)),
             border: UiRect::left(Val::Px(3.0)),
-            row_gap: Val::Px(2.0),
+            row_gap: Val::Px(1.0),
             ..default()
         },
         BackgroundColor(theme::PAPER_DEEP),
@@ -111,14 +130,15 @@ fn slot_box(row: &mut ChildSpawnerCommands, caption: &str, slot: TicketSlot, acc
         children![
             (
                 Text::new(caption.to_owned()),
-                theme::text_font(theme::SIZE_TINY),
+                fonts.data(theme::CAPTION),
                 TextColor(theme::INK_FAINT),
+                theme::TRACKED,
                 Pickable::IGNORE,
             ),
             (
                 slot,
                 Text::new("-"),
-                theme::text_font(theme::SIZE_BODY),
+                fonts.sign(theme::SIGN),
                 TextColor(theme::INK),
                 Pickable::IGNORE,
             ),
@@ -126,7 +146,7 @@ fn slot_box(row: &mut ChildSpawnerCommands, caption: &str, slot: TicketSlot, acc
     ));
 }
 
-fn control_row(panel: &mut ChildSpawnerCommands) {
+fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
     panel
         .spawn((
             Node {
@@ -144,8 +164,9 @@ fn control_row(panel: &mut ChildSpawnerCommands) {
                 Node { flex_grow: 1.0, ..control_node() },
                 children![(
                     Text::new("DEPART"),
-                    theme::text_font(theme::SIZE_SMALL),
+                    fonts.sign_bold(theme::BODY),
                     TextColor(theme::INK),
+                    theme::TRACKED,
                     Pickable::IGNORE,
                 )],
             ));
@@ -154,8 +175,9 @@ fn control_row(panel: &mut ChildSpawnerCommands) {
                 control_node(),
                 children![(
                     Text::new("CLEAR"),
-                    theme::text_font(theme::SIZE_SMALL),
+                    fonts.sign(theme::BODY),
                     TextColor(theme::INK_SOFT),
+                    theme::TRACKED,
                     Pickable::IGNORE,
                 )],
             ));
@@ -165,23 +187,47 @@ fn control_row(panel: &mut ChildSpawnerCommands) {
                 children![(
                     ClockLabel,
                     Text::new("EXPRESS"),
-                    theme::text_font(theme::SIZE_SMALL),
+                    fonts.sign(theme::BODY),
                     TextColor(theme::INK_SOFT),
+                    theme::TRACKED,
                     Pickable::IGNORE,
                 )],
             ));
         });
 }
 
+/// The shortcuts, set at the foot of the counter where there is room for them.
+fn keyboard_hints(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
+    panel.spawn((
+        Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(3.0),
+            margin: UiRect::top(Val::Px(14.0)),
+            width: Val::Percent(100.0),
+            ..default()
+        },
+        Pickable::IGNORE,
+        children![
+            theme::double_rule(),
+            (
+                Text::new("SPACE depart · ESC clear · TAB timetable"),
+                fonts.data(theme::CAPTION),
+                TextColor(theme::INK_FAINT),
+                Pickable::IGNORE,
+            ),
+        ],
+    ));
+}
+
 /// Every station, grouped by the corridor it belongs to.
-fn station_list(panel: &mut ChildSpawnerCommands, rail: &Network) {
+fn station_list(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
     panel
         .spawn((
             Node {
                 flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(3.0),
+                row_gap: Val::Px(2.0),
                 width: Val::Percent(100.0),
-                margin: UiRect::top(Val::Px(4.0)),
+                margin: UiRect::top(Val::Px(3.0)),
                 ..default()
             },
             Pickable::IGNORE,
@@ -192,28 +238,29 @@ fn station_list(panel: &mut ChildSpawnerCommands, rail: &Network) {
                     Node {
                         flex_direction: FlexDirection::Row,
                         align_items: AlignItems::Center,
-                        column_gap: Val::Px(6.0),
-                        margin: UiRect::top(Val::Px(7.0)),
+                        column_gap: Val::Px(7.0),
+                        margin: UiRect::top(Val::Px(8.0)),
                         ..default()
                     },
                     Pickable::IGNORE,
                     children![
                         (
-                            Node { width: Val::Px(14.0), height: Val::Px(3.0), ..default() },
+                            Node { width: Val::Px(16.0), height: Val::Px(3.0), ..default() },
                             BackgroundColor(theme::line_color(line)),
                             Pickable::IGNORE,
                         ),
                         (
                             Text::new(line.label().to_uppercase()),
-                            theme::text_font(theme::SIZE_TINY),
+                            fonts.data(theme::CAPTION),
                             TextColor(theme::INK_SOFT),
+                            theme::TRACKED,
                             Pickable::IGNORE,
                         ),
                     ],
                 ));
 
                 for city in rail.cities_on(line) {
-                    station_row(list, city.id, city.name, city.exonym);
+                    station_row(list, fonts, city.id, city.name, city.exonym);
                 }
             }
         });
@@ -221,11 +268,12 @@ fn station_list(panel: &mut ChildSpawnerCommands, rail: &Network) {
 
 fn station_row(
     list: &mut ChildSpawnerCommands,
+    fonts: &Fonts,
     city: CityId,
     name: &str,
     exonym: Option<&'static str>,
 ) {
-    let subtitle = exonym.map_or_else(String::new, |e| format!("({e})"));
+    let subtitle = exonym.map_or_else(String::new, |e| e.to_owned());
 
     list.spawn((
         Button,
@@ -237,7 +285,7 @@ fn station_row(
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
             column_gap: Val::Px(8.0),
-            padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
+            padding: UiRect::axes(Val::Px(8.0), Val::Px(3.0)),
             border: UiRect::left(Val::Px(2.0)),
             width: Val::Percent(100.0),
             ..default()
@@ -247,19 +295,19 @@ fn station_row(
         children![
             (
                 Text::new(city.code()),
-                theme::text_font(theme::SIZE_TINY),
+                fonts.data(theme::CAPTION),
                 TextColor(theme::BRASS_DEEP),
                 Pickable::IGNORE,
             ),
             (
                 Text::new(name.to_owned()),
-                theme::text_font(theme::SIZE_BODY),
+                fonts.sign(theme::SIGN),
                 TextColor(theme::INK),
                 Pickable::IGNORE,
             ),
             (
                 Text::new(subtitle),
-                theme::text_font(theme::SIZE_TINY),
+                fonts.prose(theme::CAPTION),
                 TextColor(theme::INK_FAINT),
                 Node { flex_grow: 1.0, ..default() },
                 Pickable::IGNORE,
@@ -267,7 +315,7 @@ fn station_row(
             (
                 StationRowNote(city),
                 Text::new(""),
-                theme::text_font(theme::SIZE_TINY),
+                fonts.data(theme::CAPTION),
                 TextColor(theme::INK_SOFT),
                 Pickable::IGNORE,
             ),
@@ -277,7 +325,7 @@ fn station_row(
 
 // --- Centre: the title and the station board ------------------------------
 
-fn centre_column(root: &mut ChildSpawnerCommands) {
+fn centre_column(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
     root.spawn((
         Node {
             flex_grow: 1.0,
@@ -293,57 +341,63 @@ fn centre_column(root: &mut ChildSpawnerCommands) {
             Node {
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
+                row_gap: Val::Px(1.0),
                 ..default()
             },
             Pickable::IGNORE,
             children![
                 (
                     Text::new("YAFA EXPRESS"),
-                    theme::text_font(theme::SIZE_TITLE),
+                    fonts.sign_bold(theme::TITLE - 4.0),
                     TextColor(theme::BRASS),
+                    theme::TRACKED_WIDE,
                     Pickable::IGNORE,
                 ),
                 (
                     Text::new("the railways of historical Palestine"),
-                    theme::text_font(theme::SIZE_TINY),
+                    fonts.prose(theme::SMALL),
                     TextColor(theme::INK_FAINT),
                     Pickable::IGNORE,
                 ),
             ],
         ));
 
-        station_board(centre);
+        station_board(centre, fonts);
     });
 }
 
-fn station_board(centre: &mut ChildSpawnerCommands) {
+fn station_board(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
     centre
         .spawn((Node { width: Val::Px(BOARD_WIDTH), ..theme::panel_node() }, theme::panel_chrome()))
         .with_children(|panel| {
             panel.spawn(theme::panel_header(
+                fonts,
                 "Station Board",
                 "Departures, arrivals and the state of the line",
             ));
             panel.spawn((
                 BoardStatus,
-                Text::new("Waiting for a ticket"),
-                theme::text_font(theme::SIZE_DISPLAY),
+                Text::new("WAITING FOR A TICKET"),
+                fonts.sign(theme::LARGE + 2.0),
                 TextColor(theme::INK),
+                theme::TRACKED_WIDE,
                 Pickable::IGNORE,
             ));
             panel.spawn((
                 BoardDetail,
                 Text::new("The counter is open."),
-                theme::text_font(theme::SIZE_SMALL),
+                fonts.prose(theme::SMALL),
                 TextColor(theme::INK_SOFT),
+                LineHeight::RelativeToFont(1.4),
                 Pickable::IGNORE,
             ));
             progress_bar(panel, BoardProgressFill, theme::OLIVE);
             panel.spawn((
                 BoardAnnouncements,
                 Text::new(""),
-                theme::text_font(theme::SIZE_SMALL),
+                fonts.data(theme::SMALL),
                 TextColor(theme::INK_SOFT),
+                LineHeight::RelativeToFont(1.55),
                 Pickable::IGNORE,
             ));
         });
@@ -356,8 +410,9 @@ fn progress_bar(panel: &mut ChildSpawnerCommands, fill: impl Component, color: C
         .spawn((
             Node {
                 width: Val::Percent(100.0),
-                height: Val::Px(7.0),
+                height: Val::Px(8.0),
                 border: UiRect::all(Val::Px(1.0)),
+                padding: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
             BackgroundColor(theme::PAPER_DEEP),
@@ -374,7 +429,7 @@ fn progress_bar(panel: &mut ChildSpawnerCommands, fill: impl Component, color: C
 
 // --- Right: the city panel and the passport -------------------------------
 
-fn right_column(root: &mut ChildSpawnerCommands, rail: &Network) {
+fn right_column(root: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
     root.spawn((
         Node {
             width: Val::Px(RIGHT_WIDTH),
@@ -385,99 +440,119 @@ fn right_column(root: &mut ChildSpawnerCommands, rail: &Network) {
         Pickable::IGNORE,
     ))
     .with_children(|column| {
-        city_panel(column);
-        passport_panel(column, rail);
+        city_panel(column, fonts);
+        passport_panel(column, rail, fonts);
     });
 }
 
-fn city_panel(column: &mut ChildSpawnerCommands) {
+fn city_panel(column: &mut ChildSpawnerCommands, fonts: &Fonts) {
     column.spawn((
         theme::panel_node(),
         theme::panel_chrome(),
         children![
-            theme::panel_header("About the City", "Click any station, on the map or in the list"),
+            theme::panel_header(
+                fonts,
+                "About the City",
+                "Click any station, on the map or in the list"
+            ),
             (
                 CityPanelPart::Name,
                 Text::new("Yafa"),
-                theme::text_font(theme::SIZE_DISPLAY),
+                fonts.sign(theme::DISPLAY),
                 TextColor(theme::INK),
+                theme::TRACKED,
                 Pickable::IGNORE,
             ),
             (
                 CityPanelPart::Subtitle,
                 Text::new(""),
-                theme::text_font(theme::SIZE_TINY),
+                fonts.data(theme::CAPTION),
                 TextColor(theme::INK_FAINT),
                 Pickable::IGNORE,
             ),
             (
                 CityPanelPart::Fact,
                 Text::new(""),
-                theme::text_font(theme::SIZE_SMALL),
+                fonts.prose(theme::BODY),
                 TextColor(theme::INK_SOFT),
+                LineHeight::RelativeToFont(1.5),
                 Pickable::IGNORE,
             ),
             (
                 CityPanelPart::Links,
                 Text::new(""),
-                theme::text_font(theme::SIZE_TINY),
+                fonts.data(theme::CAPTION),
                 TextColor(theme::BRASS_DEEP),
+                LineHeight::RelativeToFont(1.5),
                 Pickable::IGNORE,
             ),
             (
                 CityPanelPart::Stamped,
                 Text::new(""),
-                theme::text_font(theme::SIZE_TINY),
+                fonts.data_strong(theme::CAPTION),
                 TextColor(theme::STAMP_RED),
+                theme::TRACKED,
                 Pickable::IGNORE,
             ),
         ],
     ));
 }
 
-fn passport_panel(column: &mut ChildSpawnerCommands, rail: &Network) {
+fn passport_panel(column: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
     column
         .spawn((Node { flex_grow: 1.0, ..theme::panel_node() }, theme::panel_chrome()))
         .with_children(|panel| {
-            panel.spawn(theme::panel_header("Passport", "One stamp for every station called at"));
+            panel.spawn(theme::panel_header(
+                fonts,
+                "Passport",
+                "One stamp for every station called at",
+            ));
             panel.spawn((
                 PassportCounter,
-                Text::new("Visited Cities: 0 / 11"),
-                // Large rather than display size: at 26px the line wraps
-                // inside the passport's column.
-                theme::text_font(theme::SIZE_LARGE),
+                Text::new("VISITED CITIES  0 / 11"),
+                fonts.sign(theme::LARGE),
                 TextColor(theme::INK),
+                theme::TRACKED,
                 Pickable::IGNORE,
             ));
             progress_bar(panel, PassportFill, theme::STAMP_RED);
             panel.spawn((
                 PassportLines,
                 Text::new(""),
-                theme::text_font(theme::SIZE_SMALL),
+                fonts.data(theme::SMALL),
                 TextColor(theme::INK_SOFT),
                 Pickable::IGNORE,
             ));
             panel.spawn((
                 PassportOdometer,
                 Text::new(""),
-                theme::text_font(theme::SIZE_TINY),
+                fonts.prose(theme::CAPTION),
                 TextColor(theme::INK_FAINT),
                 Pickable::IGNORE,
             ));
-            stamp_grid(panel, rail);
+            stamp_grid(panel, rail, fonts);
+            panel.spawn((
+                PassportRemaining,
+                Text::new(""),
+                fonts.prose(theme::CAPTION),
+                TextColor(theme::INK_FAINT),
+                LineHeight::RelativeToFont(1.5),
+                Node { margin: UiRect::top(Val::Px(6.0)), ..default() },
+                Pickable::IGNORE,
+            ));
         });
 }
 
 /// The grid of stamp cards, one per station, locked until it is earned.
-fn stamp_grid(panel: &mut ChildSpawnerCommands, rail: &Network) {
+fn stamp_grid(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
     panel
         .spawn((
             Node {
                 flex_direction: FlexDirection::Row,
                 flex_wrap: FlexWrap::Wrap,
                 column_gap: Val::Px(6.0),
-                row_gap: Val::Px(6.0),
-                margin: UiRect::top(Val::Px(6.0)),
+                row_gap: Val::Px(7.0),
+                margin: UiRect::top(Val::Px(7.0)),
                 width: Val::Percent(100.0),
                 ..default()
             },
@@ -492,15 +567,18 @@ fn stamp_grid(panel: &mut ChildSpawnerCommands, rail: &Network) {
                     StampCard(city),
                     Hovered::default(),
                     Pickable::default(),
+                    // A hand-held stamp never lands square. Each card gets its
+                    // own small, fixed tilt so the page looks worked in.
+                    UiTransform::from_rotation(Rot2::degrees(card_tilt(city))),
                     Node {
-                        width: Val::Px(74.0),
-                        height: Val::Px(46.0),
+                        width: Val::Px(CARD_WIDTH),
+                        height: Val::Px(CARD_HEIGHT),
                         flex_direction: FlexDirection::Column,
                         align_items: AlignItems::Center,
                         justify_content: JustifyContent::Center,
-                        row_gap: Val::Px(1.0),
+                        row_gap: Val::Px(0.0),
                         border: UiRect::all(Val::Px(1.0)),
-                        border_radius: BorderRadius::all(Val::Px(3.0)),
+                        border_radius: BorderRadius::all(Val::Px(2.0)),
                         ..default()
                     },
                     BackgroundColor(theme::PAPER_DEEP),
@@ -509,20 +587,21 @@ fn stamp_grid(panel: &mut ChildSpawnerCommands, rail: &Network) {
                         (
                             StampCardCode(city),
                             Text::new(city.code()),
-                            theme::text_font(theme::SIZE_HEADING),
+                            fonts.sign_bold(theme::LARGE),
                             TextColor(theme::INK_FAINT),
+                            theme::TRACKED,
                             Pickable::IGNORE,
                         ),
                         (
                             Text::new(data.name),
-                            theme::text_font(theme::SIZE_TINY),
+                            fonts.prose(theme::CAPTION),
                             TextColor(theme::INK_FAINT),
                             Pickable::IGNORE,
                         ),
                         (
                             StampCardOrder(city),
-                            Text::new("locked"),
-                            theme::text_font(theme::SIZE_TINY),
+                            Text::new("-"),
+                            fonts.data(8.5),
                             TextColor(theme::INK_FAINT),
                             Pickable::IGNORE,
                         ),
@@ -530,6 +609,13 @@ fn stamp_grid(panel: &mut ChildSpawnerCommands, rail: &Network) {
                 ));
             }
         });
+}
+
+/// A small fixed tilt per card, from its own identifier - repeatable, and
+/// never the same two cards running.
+fn card_tilt(city: CityId) -> f32 {
+    const TILTS: [f32; 5] = [-3.4, 2.1, -1.3, 3.0, -2.4];
+    TILTS[city.index() % TILTS.len()]
 }
 
 /// The layout of a clickable control. Extend it with `..control_node()`
@@ -607,7 +693,7 @@ pub fn refresh_ticket(
                 // three lines and pushed the station list down the panel.
                 let lines: Vec<&str> = route.lines_used().iter().map(|l| l.code()).collect();
                 format!(
-                    "{:.0} km  -  {} calls  -  {:.0} min  -  {}",
+                    "{:.0} km  ·  {} calls  ·  {:.0} min  ·  {}",
                     route.total_km(),
                     route.legs.len(),
                     clock.running_minutes(route.total_m),
@@ -642,7 +728,7 @@ pub fn refresh_ticket(
         } else if desk.destination == Some(*city) {
             ("TO", theme::STAMP_RED)
         } else if book.passport.is_stamped(*city) {
-            ("stamped", theme::BRASS_DEEP)
+            ("✓", theme::BRASS_DEEP)
         } else {
             ("", theme::INK_FAINT)
         };
@@ -677,18 +763,18 @@ pub fn refresh_board(
 
     let (headline, body, progress) = match run {
         None => (
-            "Waiting for a ticket".to_owned(),
+            "WAITING FOR A TICKET".to_owned(),
             "The counter is open. Pick a departure and a destination.".to_owned(),
             0.0,
         ),
         Some(run) => {
             let leg = run.current_leg();
             let headline = match run.phase() {
-                Phase::Boarding => format!("Boarding at {}", rail.city(leg.from).name),
-                Phase::Running => format!("In transit to {}", rail.city(leg.to).name),
-                Phase::Dwelling => format!("Standing at {}", rail.city(leg.from).name),
+                Phase::Boarding => format!("BOARDING AT {}", rail.city(leg.from).name),
+                Phase::Running => format!("IN TRANSIT TO {}", rail.city(leg.to).name),
+                Phase::Dwelling => format!("STANDING AT {}", rail.city(leg.from).name),
                 Phase::Arrived => {
-                    format!("Arrived at {}", rail.city(run.route().destination()).name)
+                    format!("ARRIVED AT {}", rail.city(run.route().destination()).name)
                 }
             };
             let body = match run.phase() {
@@ -704,7 +790,7 @@ pub fn refresh_board(
                     run.eta_minutes(&clock.0),
                 ),
             };
-            (headline, body, run.progress())
+            (headline.to_uppercase(), body, run.progress())
         }
     };
 
@@ -718,7 +804,7 @@ pub fn refresh_board(
         node.width = Val::Percent(progress * 100.0);
     }
     if let Ok(mut text) = announcements.single_mut() {
-        text.0 = announcer.lines().collect::<Vec<_>>().join("\n");
+        text.0 = announcer.lines().map(|line| format!("› {line}")).collect::<Vec<_>>().join("\n");
     }
 }
 
@@ -735,10 +821,10 @@ pub fn refresh_city_panel(
 
     for (part, mut text) in &mut parts {
         text.0 = match part {
-            CityPanelPart::Name => data.name.to_owned(),
+            CityPanelPart::Name => data.name.to_uppercase(),
             CityPanelPart::Subtitle => {
-                let exonym = data.exonym.map_or_else(String::new, |e| format!("{e}  -  "));
-                format!("{exonym}{}  -  station code {}", data.line_type.label(), city.code())
+                let exonym = data.exonym.map_or_else(String::new, |e| format!("{e}  ·  "));
+                format!("{exonym}{}  ·  {}", data.line_type.label(), city.code())
             }
             CityPanelPart::Fact => data.historical_fact.to_owned(),
             CityPanelPart::Links => rail
@@ -757,9 +843,10 @@ pub fn refresh_city_panel(
                 .join("\n"),
             CityPanelPart::Stamped => match stamp {
                 Some(stamp) => {
-                    format!("STAMPED - the {} station in this passport", ordinal(stamp.order))
+                    format!("STAMPED - THE {} STATION IN THIS PASSPORT", ordinal(stamp.order))
+                        .to_uppercase()
                 }
-                None => "NOT YET VISITED - buy a ticket through here".to_owned(),
+                None => "NOT YET VISITED - BUY A TICKET THROUGH HERE".to_owned(),
             },
         };
     }
@@ -771,10 +858,19 @@ pub fn refresh_passport(
     book: Res<PassportBook>,
     mut counter: Query<
         &mut Text,
-        (With<PassportCounter>, Without<PassportLines>, Without<PassportOdometer>),
+        (
+            With<PassportCounter>,
+            Without<PassportLines>,
+            Without<PassportOdometer>,
+            Without<PassportRemaining>,
+        ),
     >,
-    mut lines: Query<&mut Text, (With<PassportLines>, Without<PassportOdometer>)>,
-    mut odometer: Query<&mut Text, With<PassportOdometer>>,
+    mut lines: Query<
+        &mut Text,
+        (With<PassportLines>, Without<PassportOdometer>, Without<PassportRemaining>),
+    >,
+    mut odometer: Query<&mut Text, (With<PassportOdometer>, Without<PassportRemaining>)>,
+    mut remaining: Query<&mut Text, With<PassportRemaining>>,
     mut fill: Query<&mut Node, With<PassportFill>>,
     mut cards: Query<(&StampCard, &mut BackgroundColor, &mut BorderColor)>,
     mut codes: Query<(&StampCardCode, &mut TextColor)>,
@@ -784,6 +880,7 @@ pub fn refresh_passport(
             Without<PassportCounter>,
             Without<PassportLines>,
             Without<PassportOdometer>,
+            Without<PassportRemaining>,
             Without<StampCardCode>,
         ),
     >,
@@ -791,7 +888,8 @@ pub fn refresh_passport(
     let passport = &book.passport;
 
     if let Ok(mut text) = counter.single_mut() {
-        text.0 = passport.counter();
+        text.0 =
+            format!("VISITED CITIES  {} / {}", passport.visited_count(), passport.total_cities());
     }
     if let Ok(mut node) = fill.single_mut() {
         node.width = Val::Percent(passport.completion() * 100.0);
@@ -802,31 +900,45 @@ pub fn refresh_passport(
             .iter()
             .map(|progress| {
                 format!(
-                    "{}  {} / {}{}",
+                    "{} {}/{}{}",
                     progress.line.code(),
                     progress.stamped,
                     progress.total,
-                    if progress.is_complete() { "  complete" } else { "" },
+                    if progress.is_complete() { " ✓" } else { "" },
                 )
             })
             .collect::<Vec<_>>()
-            .join("     ");
+            .join("    ");
     }
     if let Ok(mut text) = odometer.single_mut() {
         text.0 = format!(
-            "{} journeys  -  {:.0} km of track behind you",
+            "{} journeys  ·  {:.0} km of track behind you",
             passport.journeys_completed(),
             passport.total_track_km(),
         );
+    }
+
+    if let Ok(mut text) = remaining.single_mut() {
+        let left = passport.unstamped();
+        text.0 = match left.split_first() {
+            // Name a few, so there is always somewhere obvious to go next.
+            Some((_, _)) => {
+                let names: Vec<&str> = left.iter().take(3).map(|&c| rail.city(c).name).collect();
+                let more = left.len().saturating_sub(names.len());
+                let tail = if more > 0 { format!(", and {more} more") } else { String::new() };
+                format!("Still to call at: {}{tail}.", names.join(", "))
+            }
+            None => "Every station on the network is stamped.".to_owned(),
+        };
     }
 
     for (StampCard(city), mut background, mut border) in &mut cards {
         let earned = passport.is_stamped(*city);
         background.0 = if earned { theme::PAPER } else { theme::PAPER_DEEP };
         *border = BorderColor::all(if earned {
-            theme::line_color(rail.city(*city).line_type)
+            theme::STAMP_RED.with_alpha(0.85)
         } else {
-            theme::INK_FAINT
+            theme::INK_FAINT.with_alpha(0.55)
         });
     }
     for (StampCardCode(city), mut color) in &mut codes {
@@ -835,11 +947,11 @@ pub fn refresh_passport(
     for (StampCardOrder(city), mut text, mut color) in &mut orders {
         match passport.stamp_for(*city) {
             Some(stamp) => {
-                text.0 = format!("no. {}", stamp.order);
+                text.0 = format!("No. {}", stamp.order);
                 color.0 = theme::INK_SOFT;
             }
             None => {
-                text.0 = "locked".to_owned();
+                text.0 = "-".to_owned();
                 color.0 = theme::INK_FAINT;
             }
         }
@@ -864,20 +976,31 @@ pub fn flash_new_stamps(
     }
 }
 
-/// Runs the flash down and takes it off again.
+/// Runs the flash down and takes it off again: the card presses in under the
+/// stamp and settles back.
 pub fn run_stamp_flash(
     mut commands: Commands,
     time: Res<Time>,
-    mut flashing: Query<(Entity, &mut StampFlash, &mut BackgroundColor)>,
+    mut flashing: Query<(
+        Entity,
+        &StampCard,
+        &mut StampFlash,
+        &mut BackgroundColor,
+        &mut UiTransform,
+    )>,
 ) {
-    for (entity, mut flash, mut background) in &mut flashing {
+    for (entity, StampCard(city), mut flash, mut background, mut transform) in &mut flashing {
         flash.remaining -= time.delta_secs();
         if flash.remaining <= 0.0 {
+            transform.scale = Vec2::ONE;
             commands.entity(entity).remove::<StampFlash>();
             continue;
         }
         let strength = flash.remaining / StampFlash::DURATION;
         background.0 = theme::PAPER.mix(&theme::BRASS, strength * 0.8);
+        // Overshoot once, then settle - the press of the stamp coming down.
+        transform.scale = Vec2::splat(1.0 + strength * strength * 0.16);
+        transform.rotation = Rot2::degrees(card_tilt(*city) * (1.0 + strength * 0.9));
     }
 }
 
