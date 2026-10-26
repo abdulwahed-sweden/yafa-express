@@ -205,6 +205,7 @@ impl Plugin for PresentationPlugin {
                     map::draw_shorelines,
                     map::draw_furniture,
                     map::draw_network,
+                    map::refresh_season,
                     map::refresh_station_state,
                     map::draw_station_rings,
                     map::draw_steam,

@@ -310,6 +310,10 @@ pub struct StationList;
 #[derive(Resource, Deref, DerefMut, Default)]
 pub struct Almanac(pub yafa_core::Calendar);
 
+/// A body of water, so the season can move the light on it.
+#[derive(Component)]
+pub struct SeaFill;
+
 /// One of the two coloured squares that make up a station marker.
 #[derive(Component, Clone, Copy)]
 pub struct StationFace {
@@ -321,6 +325,10 @@ pub struct StationFace {
 /// The year, shown in the header beside the passport count.
 #[derive(Component)]
 pub struct HeaderYear;
+
+/// The season, shown under the year.
+#[derive(Component)]
+pub struct HeaderSeason;
 
 /// The passport count, shown in the header beside the year.
 #[derive(Component)]

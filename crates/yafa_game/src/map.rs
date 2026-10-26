@@ -301,6 +301,7 @@ pub fn spawn_water(
 
     for mesh in water {
         commands.spawn((
+            SeaFill,
             Mesh2d(meshes.add(mesh)),
             MeshMaterial2d(fill.clone()),
             Transform::from_translation(Vec3::new(0.0, 0.0, WATER_Z)),
@@ -675,4 +676,28 @@ fn scale_bar_figures(commands: &mut Commands, view: &MapView, fonts: &Fonts) {
         Vec2::ZERO,
     );
     figure("N".to_owned(), origin + Vec2::new(length * 0.5, 56.0), theme::CAPTION, Vec2::ZERO);
+}
+
+/// Moves the light on the map with the season.
+///
+/// The ground and the water carry it rather than an overlay: 2D gizmos sort
+/// last whatever their depth, so a translucent sheet laid over the map would
+/// tint the water and the engine but leave every rail, ring and shoreline
+/// untouched, and the map would come apart.
+pub fn refresh_season(
+    almanac: Res<Almanac>,
+    mut cameras: Query<&mut Camera, With<MapCamera>>,
+    water: Query<&MeshMaterial2d<ColorMaterial>, With<SeaFill>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let through = almanac.through_year();
+
+    if let Ok(mut camera) = cameras.single_mut() {
+        camera.clear_color = ClearColorConfig::Custom(theme::Season::page(through));
+    }
+    if let Some(handle) = water.iter().next()
+        && let Some(ref mut material) = materials.get_mut(&handle.0)
+    {
+        material.color = theme::Season::water(through);
+    }
 }

@@ -96,6 +96,59 @@ pub fn line_color_dim(line: LineType) -> Color {
     line_color(line).mix(&DESK, 0.62)
 }
 
+// --- The season -----------------------------------------------------------
+
+/// Where the year stands, as the map is lit.
+///
+/// The calendar turns over every 120 km run, so a single journey is weeks of
+/// a year and the light moves with it: a cool, low winter, a green spring, a
+/// bleached summer, an amber autumn. The wash is deliberately slight. It is
+/// meant to be noticed over a few journeys, not between one frame and the
+/// next.
+pub struct Season;
+
+/// The four corners of the year, as (page, water, name).
+const SEASONS: [(Color, Color, &str); 4] = [
+    // Winter: the light goes blue and the page darkens.
+    (Color::srgb_u8(0xE8, 0xE9, 0xEC), Color::srgb_u8(0xC9, 0xE2, 0xE8), "winter"),
+    // Spring.
+    (Color::srgb_u8(0xF3, 0xF6, 0xEA), Color::srgb_u8(0xD5, 0xEF, 0xE4), "spring"),
+    // High summer: bleached and warm.
+    (Color::srgb_u8(0xFA, 0xF6, 0xE6), Color::srgb_u8(0xDC, 0xF0, 0xEE), "summer"),
+    // Autumn.
+    (Color::srgb_u8(0xF5, 0xF0, 0xE2), Color::srgb_u8(0xD6, 0xE9, 0xE4), "autumn"),
+];
+
+impl Season {
+    /// The ground the map is drawn on.
+    pub fn page(through_year: f32) -> Color {
+        let (from, to, blend) = Self::between(through_year);
+        SEASONS[from].0.mix(&SEASONS[to].0, blend)
+    }
+
+    /// The water, which takes the same light.
+    pub fn water(through_year: f32) -> Color {
+        let (from, to, blend) = Self::between(through_year);
+        SEASONS[from].1.mix(&SEASONS[to].1, blend)
+    }
+
+    /// What to call it, for the header.
+    pub fn name(through_year: f32) -> &'static str {
+        let (from, to, blend) = Self::between(through_year);
+        if blend < 0.5 { SEASONS[from].2 } else { SEASONS[to].2 }
+    }
+
+    /// The pair of seasons the year stands between, and how far across.
+    ///
+    /// The year starts in winter, so the position is taken straight from the
+    /// calendar with no offset.
+    fn between(through_year: f32) -> (usize, usize, f32) {
+        let position = through_year.rem_euclid(1.0) * SEASONS.len() as f32;
+        let from = position.floor() as usize % SEASONS.len();
+        (from, (from + 1) % SEASONS.len(), position.fract())
+    }
+}
+
 // --- Type scale -----------------------------------------------------------
 
 pub const CAPTION: f32 = 14.0;

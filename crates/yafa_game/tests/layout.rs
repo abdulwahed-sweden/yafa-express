@@ -266,3 +266,30 @@ fn the_arrival_card_covers_the_city_card_and_then_goes() {
     }
     assert_eq!(shown(&mut app), (false, true));
 }
+
+#[test]
+fn the_light_moves_with_the_year() {
+    use yafa_game::theme::Season;
+
+    // The four corners of the year must be four distinguishable washes,
+    // otherwise the tint is doing nothing at all.
+    let corners: Vec<[f32; 4]> = [0.0, 0.25, 0.5, 0.75]
+        .iter()
+        .map(|&through| Season::page(through).to_srgba().to_f32_array())
+        .collect();
+    for (i, a) in corners.iter().enumerate() {
+        for b in &corners[i + 1..] {
+            let apart: f32 = a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum();
+            assert!(apart > 0.01, "two seasons look the same: {a:?} / {b:?}");
+        }
+    }
+
+    // And it is a cycle: the end of the year meets the start of it.
+    let new_year = Season::page(0.0).to_srgba().to_f32_array();
+    let eve = Season::page(0.999).to_srgba().to_f32_array();
+    let apart: f32 = new_year.iter().zip(&eve).map(|(x, y)| (x - y).abs()).sum();
+    assert!(apart < 0.02, "the year should close on itself: {new_year:?} / {eve:?}");
+
+    assert_eq!(Season::name(0.0), "winter");
+    assert_eq!(Season::name(0.5), "summer");
+}

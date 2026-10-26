@@ -392,11 +392,28 @@ fn header_bar(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 Pickable::IGNORE,
                 children![
                     (
-                        HeaderYear,
-                        Text::new("1892"),
-                        fonts.sign_bold(theme::DISPLAY),
-                        TextColor(theme::VISITED),
+                        Node {
+                            flex_direction: FlexDirection::Column,
+                            align_items: AlignItems::FlexEnd,
+                            ..default()
+                        },
                         Pickable::IGNORE,
+                        children![
+                            (
+                                HeaderYear,
+                                Text::new("1892"),
+                                fonts.sign_bold(theme::DISPLAY),
+                                TextColor(theme::VISITED),
+                                Pickable::IGNORE,
+                            ),
+                            (
+                                HeaderSeason,
+                                Text::new(""),
+                                fonts.data(theme::CAPTION),
+                                TextColor(theme::INK_FAINT),
+                                Pickable::IGNORE,
+                            ),
+                        ],
                     ),
                     (
                         HeaderBalance,
@@ -962,8 +979,18 @@ pub fn refresh_header(
     almanac: Res<Almanac>,
     book: Res<PassportBook>,
     counting: Res<Counting>,
-    mut year: Query<&mut Text, (With<HeaderYear>, Without<HeaderCount>, Without<HeaderBalance>)>,
-    mut balance: Query<&mut Text, (With<HeaderBalance>, Without<HeaderCount>)>,
+    mut year: Query<
+        &mut Text,
+        (With<HeaderYear>, Without<HeaderCount>, Without<HeaderBalance>, Without<HeaderSeason>),
+    >,
+    mut season: Query<
+        &mut Text,
+        (With<HeaderSeason>, Without<HeaderCount>, Without<HeaderBalance>),
+    >,
+    mut balance: Query<
+        &mut Text,
+        (With<HeaderBalance>, Without<HeaderCount>, Without<HeaderSeason>),
+    >,
     mut count: Query<&mut Text, With<HeaderCount>>,
 ) {
     if let Ok(mut text) = balance.single_mut() {
@@ -971,6 +998,11 @@ pub fn refresh_header(
     }
     if let Ok(mut text) = year.single_mut() {
         text.0 = almanac.year().to_string();
+    }
+    if let Ok(mut text) = season.single_mut() {
+        // Named, because an unexplained shift in the light is just a bug the
+        // player cannot report.
+        text.0 = theme::Season::name(almanac.through_year()).to_owned();
     }
     if let Ok(mut text) = count.single_mut() {
         text.0 = format!(
