@@ -89,6 +89,8 @@ fn the_whole_layout_spawns_and_refreshes() {
 
 #[test]
 fn there_is_one_marker_and_one_stamp_card_per_station() {
+    // The station list panel is gone - the schematic map is the list now -
+    // so the map's own marks are what has to be there, one per city.
     let mut app = headless_with_ui("there_is_one_marker_and_one_stamp_card_per_station");
 
     let mut dots = app.world_mut().query::<&StationDot>();
@@ -96,9 +98,6 @@ fn there_is_one_marker_and_one_stamp_card_per_station() {
 
     let mut labels = app.world_mut().query::<&StationLabel>();
     assert_eq!(labels.iter(app.world()).count(), CITY_COUNT);
-
-    let mut rows = app.world_mut().query::<&StationRow>();
-    assert_eq!(rows.iter(app.world()).count(), CITY_COUNT);
 
     let mut cards = app.world_mut().query::<&StampCard>();
     assert_eq!(cards.iter(app.world()).count(), CITY_COUNT);

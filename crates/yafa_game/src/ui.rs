@@ -11,7 +11,6 @@
 //! code and time in the monospace - so the eye can tell a place from a
 //! measurement before it reads either.
 
-use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::text::LineHeight;
@@ -26,8 +25,6 @@ use crate::theme::{self, Fonts};
 const LEFT_WIDTH: f32 = 318.0;
 const RIGHT_WIDTH: f32 = 348.0;
 const BOARD_WIDTH: f32 = 560.0;
-/// The station list is taller than the panel; past this it scrolls.
-const LIST_HEIGHT: f32 = 330.0;
 /// No station on the map has more than four lines leaving it.
 const MAX_LINKS: usize = 4;
 /// Stamp cards, four to a row inside the passport.
@@ -67,7 +64,7 @@ pub fn build_ui(mut commands: Commands, rail: Res<Rail>, fonts: Res<Fonts>, lang
             Name::new("Interface"),
         ))
         .with_children(|root| {
-            ticket_counter(root, &rail, &fonts, lang);
+            ticket_counter(root, &fonts, lang);
             centre_column(root, &fonts, lang);
             right_column(root, &rail, &fonts, lang);
         });
@@ -75,7 +72,7 @@ pub fn build_ui(mut commands: Commands, rail: Res<Rail>, fonts: Res<Fonts>, lang
 
 // --- Ticket counter -------------------------------------------------------
 
-fn ticket_counter(root: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts, lang: Language) {
+fn ticket_counter(root: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
     root.spawn((
         Node { width: Val::Px(LEFT_WIDTH), flex_direction: FlexDirection::Column, ..default() },
         Pickable::IGNORE,
@@ -99,7 +96,6 @@ fn ticket_counter(root: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts
                     Pickable::IGNORE,
                 ));
                 control_row(panel, fonts, lang);
-                station_list(panel, rail, fonts, lang);
                 keyboard_hints(panel, fonts, lang);
             });
     });
@@ -225,114 +221,6 @@ fn keyboard_hints(panel: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Languag
                 Text::new(lang.say(Phrase::Shortcuts)),
                 fonts.data(theme::CAPTION),
                 TextColor(theme::INK_FAINT),
-                Pickable::IGNORE,
-            ),
-        ],
-    ));
-}
-
-/// Every station, grouped by the corridor it belongs to.
-fn station_list(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts, lang: Language) {
-    panel
-        .spawn((
-            StationList,
-            Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(2.0),
-                width: Val::Percent(100.0),
-                max_height: Val::Px(LIST_HEIGHT),
-                overflow: Overflow::scroll_y(),
-                margin: UiRect::top(Val::Px(3.0)),
-                ..default()
-            },
-            // Scrollable, so it has to take the pointer rather than ignore it.
-            Pickable::default(),
-            Hovered::default(),
-        ))
-        .with_children(|list| {
-            for line in LineType::ALL {
-                list.spawn((
-                    Node {
-                        flex_direction: FlexDirection::Row,
-                        align_items: AlignItems::Center,
-                        column_gap: Val::Px(7.0),
-                        margin: UiRect::top(Val::Px(8.0)),
-                        ..default()
-                    },
-                    Pickable::IGNORE,
-                    children![
-                        (
-                            Node { width: Val::Px(16.0), height: Val::Px(3.0), ..default() },
-                            BackgroundColor(theme::line_color(line)),
-                            Pickable::IGNORE,
-                        ),
-                        (
-                            Text::new(corridor(lang, line).to_owned()),
-                            fonts.data(theme::CAPTION),
-                            TextColor(theme::INK_SOFT),
-                            Pickable::IGNORE,
-                        ),
-                    ],
-                ));
-
-                for city in rail.cities_on(line) {
-                    station_row(list, fonts, city.id, station_name(lang, city), city.exonym);
-                }
-            }
-        });
-}
-
-fn station_row(
-    list: &mut ChildSpawnerCommands,
-    fonts: &Fonts,
-    city: CityId,
-    name: &str,
-    exonym: Option<&'static str>,
-) {
-    let subtitle = exonym.map_or_else(String::new, |e| e.to_owned());
-
-    list.spawn((
-        Button,
-        UiAction::PickCity(city),
-        StationRow(city),
-        Hovered::default(),
-        Pickable::default(),
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: Val::Px(8.0),
-            padding: UiRect::axes(Val::Px(8.0), Val::Px(3.0)),
-            border: UiRect::left(Val::Px(2.0)),
-            width: Val::Percent(100.0),
-            ..default()
-        },
-        BackgroundColor(theme::PAPER),
-        BorderColor::all(Color::NONE),
-        children![
-            (
-                Text::new(city.code()),
-                fonts.data(theme::CAPTION),
-                TextColor(theme::SLATE),
-                Pickable::IGNORE,
-            ),
-            (
-                Text::new(name.to_owned()),
-                fonts.sign(theme::SIGN),
-                TextColor(theme::INK),
-                Pickable::IGNORE,
-            ),
-            (
-                Text::new(subtitle),
-                fonts.prose(theme::CAPTION),
-                TextColor(theme::INK_FAINT),
-                Node { flex_grow: 1.0, ..default() },
-                Pickable::IGNORE,
-            ),
-            (
-                StationRowNote(city),
-                Text::new(""),
-                fonts.data(theme::CAPTION),
-                TextColor(theme::INK_SOFT),
                 Pickable::IGNORE,
             ),
         ],
@@ -906,18 +794,12 @@ pub fn refresh_ticket(
     lang: Res<Language>,
     desk: Res<Desk>,
     clock: Res<Clock>,
-    book: Res<PassportBook>,
     almanac: Res<Almanac>,
     counting: Res<Counting>,
     phase: Res<State<GamePhase>>,
     mut slots: Query<(&TicketSlot, &mut Text), (Without<TicketRouteText>, Without<ClockLabel>)>,
     mut route_text: Query<&mut Text, (With<TicketRouteText>, Without<ClockLabel>)>,
     mut clock_label: Query<&mut Text, With<ClockLabel>>,
-    mut rows: Query<(&StationRow, &Hovered, &mut BackgroundColor, &mut BorderColor)>,
-    mut notes: Query<
-        (&StationRowNote, &mut Text, &mut TextColor),
-        (Without<TicketSlot>, Without<TicketRouteText>, Without<ClockLabel>),
-    >,
     mut depart: Query<&mut BorderColor, (With<DepartButton>, Without<StationRow>)>,
 ) {
     for (slot, mut text) in &mut slots {
@@ -976,40 +858,6 @@ pub fn refresh_ticket(
 
     if let Ok(mut text) = clock_label.single_mut() {
         text.0 = speed_name(*lang, clock.clock_label()).to_owned();
-    }
-
-    for (StationRow(city), hovered, mut background, mut border) in &mut rows {
-        let (bg, accent) = if !rail.station_is_open(*city, almanac.year()) {
-            // Off the network this year: still listed, still readable, but
-            // plainly not somewhere a ticket can be bought to.
-            (theme::PAPER, Color::NONE)
-        } else if desk.origin == Some(*city) {
-            (theme::PAPER_PRESSED, theme::VISITED)
-        } else if desk.destination == Some(*city) {
-            (theme::PAPER_PRESSED, theme::PENDING)
-        } else if hovered.get() {
-            (theme::PAPER_DEEP, theme::INK_FAINT)
-        } else {
-            (theme::PAPER, Color::NONE)
-        };
-        background.0 = bg;
-        *border = BorderColor::all(accent);
-    }
-
-    for (StationRowNote(city), mut text, mut color) in &mut notes {
-        let (note, tint) = if desk.origin == Some(*city) {
-            ("From", theme::VISITED)
-        } else if desk.destination == Some(*city) {
-            ("To", theme::PENDING)
-        } else if book.passport.is_stamped(*city) {
-            ("✓", theme::VISITED)
-        } else if !rail.station_is_open(*city, almanac.year()) {
-            (lang.say(Phrase::NoLine), theme::INK_FAINT)
-        } else {
-            ("", theme::INK_FAINT)
-        };
-        text.0 = note.to_owned();
-        color.0 = tint;
     }
 
     if let Ok(mut border) = depart.single_mut() {
@@ -1360,33 +1208,6 @@ fn ordinal(lang: Language, order: u32) -> String {
     NAMES
         .get(order.saturating_sub(1) as usize)
         .map_or_else(|| format!("{order}th"), |name| (*name).to_owned())
-}
-
-/// Scrolls the station list under the pointer.
-///
-/// Twenty-three stations are more than the counter can show at once, so the
-/// list is a scrolling column. Bevy moves the content but leaves the wheel to
-/// the game.
-pub fn scroll_station_list(
-    mut wheel: MessageReader<MouseWheel>,
-    mut lists: Query<(&Hovered, &mut ScrollPosition), With<StationList>>,
-) {
-    let mut ticks = 0.0;
-    for event in wheel.read() {
-        // A line of a wheel is worth about one row; a trackpad reports pixels.
-        ticks += match event.unit {
-            MouseScrollUnit::Line => event.y * 26.0,
-            MouseScrollUnit::Pixel => event.y,
-        };
-    }
-    if ticks == 0.0 {
-        return;
-    }
-    for (hovered, mut scroll) in &mut lists {
-        if hovered.get() {
-            scroll.0.y = (scroll.0.y - ticks).max(0.0);
-        }
-    }
 }
 
 /// Fills the city card's track list, and offers to lay what is still on paper.

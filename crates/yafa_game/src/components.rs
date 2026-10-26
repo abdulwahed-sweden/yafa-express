@@ -497,3 +497,23 @@ pub struct StationMark {
 /// The Latin name set under a station's Arabic one on the schematic.
 #[derive(Component, Clone, Copy)]
 pub struct StationLatin(pub CityId);
+
+/// The ground of the in-car progress strip.
+#[derive(Component)]
+pub struct StripGround;
+
+/// The one status line above the strip.
+#[derive(Component)]
+pub struct StripStatus;
+
+/// One label slot on the strip, filled from the current route.
+#[derive(Component, Clone, Copy)]
+pub struct StripStop(pub usize);
+
+/// The white box the terminus sits in, and the two names inside it.
+#[derive(Component)]
+pub struct StripTerminusBox;
+#[derive(Component)]
+pub struct StripTerminusName;
+#[derive(Component)]
+pub struct StripTerminusLatin;

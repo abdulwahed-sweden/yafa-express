@@ -11,10 +11,10 @@ use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::sprite_render::ColorMaterial;
-use yafa_core::{CityId, GeoPoint, Label, LabelSide, LineType, Network, coast};
+use yafa_core::{CityId, GeoPoint, Label, LabelSide, LineType, Network, Phase, coast};
 
 use crate::components::*;
-use crate::strings::Language;
+use crate::strings::{Language, Phrase, fill};
 use crate::theme::{self, Fonts};
 
 /// Pixels of map for one kilometre of ground.
@@ -1028,6 +1028,294 @@ pub fn refresh_schematic_stations(
         } else {
             theme::SLATE
         };
+    }
+}
+
+// --- The in-car progress strip ---------------------------------------------
+
+/// The frame the concept's in-car screen is drawn into.
+const STRIP: Vec2 = Vec2::new(900.0, 170.0);
+/// The most stops a strip will label. The longest route on the network is
+/// shorter than this; anything beyond it would be unreadable anyway.
+pub const MAX_STOPS: usize = 14;
+
+/// Where the strip sits in the world, and how big it is drawn.
+#[derive(Resource)]
+pub struct StripView {
+    pub scale: f32,
+    pub origin: Vec2,
+}
+
+impl StripView {
+    pub fn at(&self, point: Vec2) -> Vec2 {
+        self.origin + Vec2::new(point.x, -point.y) * self.scale
+    }
+
+    pub fn len(&self, units: f32) -> f32 {
+        units * self.scale
+    }
+}
+
+/// Fits the strip into the band between the map and the station board.
+pub fn make_strip_view() -> StripView {
+    const AREA_CENTRE: Vec2 = Vec2::new(-15.0, -196.0);
+    const AREA: Vec2 = Vec2::new(712.0, 150.0);
+
+    let scale = (AREA / STRIP).min_element();
+    let drawn = STRIP * scale;
+    StripView { scale, origin: AREA_CENTRE + Vec2::new(-drawn.x, drawn.y) * 0.5 }
+}
+
+/// Lays the strip's ground and the text that rides on it.
+///
+/// A fixed set of label slots is spawned once and shown or hidden as the route
+/// changes, because a route is between two and a dozen stops long and
+/// respawning text every frame would be wasteful and would flicker.
+pub fn spawn_progress_strip(mut commands: Commands, view: Res<StripView>, fonts: Res<Fonts>) {
+    let drawn = STRIP * view.scale;
+    commands.spawn((
+        StripGround,
+        Sprite::from_color(GROUND, drawn),
+        Transform::from_translation(
+            (view.origin + Vec2::new(drawn.x, -drawn.y) * 0.5).extend(-20.0),
+        ),
+        Pickable::IGNORE,
+    ));
+
+    commands.spawn((
+        StripStatus,
+        Text2d::new(""),
+        fonts.sign(view.len(16.0)),
+        TextColor(Color::WHITE),
+        Anchor(Vec2::new(0.5, 0.0)),
+        Transform::from_translation(view.at(Vec2::new(850.0, 30.0)).extend(2.0)),
+        Pickable::IGNORE,
+    ));
+
+    for slot in 0..MAX_STOPS {
+        commands.spawn((
+            StripStop(slot),
+            Text2d::new(""),
+            fonts.sign(view.len(14.0)),
+            TextColor(Color::WHITE),
+            Anchor(Vec2::new(-0.5, 0.0)),
+            Transform::from_translation(Vec3::ZERO),
+            Visibility::Hidden,
+            Pickable::IGNORE,
+        ));
+    }
+
+    // The terminus sits in a white box at the end of the line. The two names
+    // are its children, so the box alone is moved and shown, and they follow.
+    commands.spawn((
+        StripTerminusBox,
+        Sprite::from_color(Color::WHITE, Vec2::new(view.len(150.0), view.len(92.0))),
+        Transform::from_translation(Vec3::ZERO),
+        Visibility::Hidden,
+        Pickable::IGNORE,
+        children![
+            (
+                StripTerminusName,
+                Text2d::new(""),
+                fonts.sign_bold(view.len(20.0)),
+                TextColor(theme::INK),
+                Transform::from_translation(Vec3::new(0.0, view.len(10.0), 0.1)),
+                Pickable::IGNORE,
+            ),
+            (
+                StripTerminusLatin,
+                Text2d::new(""),
+                fonts.data(view.len(12.0)),
+                TextColor(theme::INK_SOFT),
+                Transform::from_translation(Vec3::new(0.0, -view.len(16.0), 0.1)),
+                Pickable::IGNORE,
+            ),
+        ],
+    ));
+}
+
+/// Where each stop of the current route sits on the strip.
+fn stop_positions(view: &StripView, stops: usize) -> Vec<Vec2> {
+    let gap = if stops > 1 { (620.0 / (stops - 1) as f32).min(90.0) } else { 0.0 };
+    (0..stops).map(|i| view.at(Vec2::new(50.0 + i as f32 * gap, 118.0))).collect()
+}
+
+/// Draws the line, the stops and the train on the strip.
+pub fn draw_progress_strip(
+    mut gizmos: Gizmos,
+    rail: Res<Rail>,
+    view: Res<StripView>,
+    runs: Query<&TrainRun>,
+) {
+    let Ok(run) = runs.single() else { return };
+    let stops: Vec<CityId> = run.route().stops().collect();
+    let xs = stop_positions(&view, stops.len());
+    let (Some(first), Some(last)) = (xs.first(), xs.last()) else { return };
+
+    // Ahead of the train in white, behind it in the route's own colour.
+    let here = strip_train(run, &xs);
+    thick_polyline(&mut gizmos, &[*first, *last], Color::WHITE, view.len(8.0));
+    let colour = theme::line_color(run.current_leg().line);
+    thick_polyline(&mut gizmos, &[*first, here], colour, view.len(8.0));
+
+    let reached = reached_count(run);
+    for (index, at) in xs.iter().enumerate() {
+        let next = index == reached.min(stops.len() - 1);
+        let passed = index < reached;
+        let radius = if next { view.len(8.0) } else { view.len(6.0) };
+        let fill = if passed || next { colour } else { Color::WHITE };
+        disc(&mut gizmos, *at, radius, fill);
+    }
+
+    // The train itself, a small marker on the line.
+    let half = Vec2::new(view.len(14.0), view.len(7.0));
+    gizmos.rect_2d(Isometry2d::from_translation(here), half * 2.0, PICKED);
+    disc(&mut gizmos, here, view.len(5.0), PICKED);
+
+    // A short tail of line into the terminus box.
+    thick_polyline(
+        &mut gizmos,
+        &[*last, *last + Vec2::new(view.len(40.0), 0.0)],
+        Color::WHITE,
+        view.len(8.0),
+    );
+    let _ = rail;
+}
+
+/// A filled circle, drawn from rings because gizmos only stroke.
+fn disc(gizmos: &mut Gizmos, centre: Vec2, radius: f32, color: Color) {
+    let rings = (radius.round() as i32).max(1);
+    for ring in 0..=rings {
+        gizmos.circle_2d(centre, radius * ring as f32 / rings as f32, color);
+    }
+}
+
+/// How many stops of the route the train has already called at.
+fn reached_count(run: &TrainRun) -> usize {
+    let stops: Vec<CityId> = run.route().stops().collect();
+    match run.standing_at() {
+        Some(city) => stops.iter().position(|&s| s == city).unwrap_or(0),
+        None => stops.iter().position(|&s| s == run.current_leg().from).unwrap_or(0),
+    }
+}
+
+/// Where the train marker sits along the strip.
+fn strip_train(run: &TrainRun, xs: &[Vec2]) -> Vec2 {
+    if xs.is_empty() {
+        return Vec2::ZERO;
+    }
+    let travelled = run.progress() * (xs.len() - 1) as f32;
+    let index = (travelled.floor() as usize).min(xs.len() - 1);
+    let next = (index + 1).min(xs.len() - 1);
+    xs[index].lerp(xs[next], travelled - index as f32)
+}
+
+/// Fills the strip's text from the current route.
+///
+/// Passed stops are dimmed, the next one is set larger and heavier, and the
+/// terminus sits in its white box at the end - the three states the concept
+/// asks for. With no train running the strip is empty and says so.
+pub fn refresh_progress_strip(
+    rail: Res<Rail>,
+    view: Res<StripView>,
+    lang: Res<Language>,
+    fonts: Res<Fonts>,
+    runs: Query<&TrainRun>,
+    mut stops_text: Query<
+        (&StripStop, &mut Text2d, &mut Transform, &mut Visibility, &mut TextColor, &mut TextFont),
+        (
+            Without<StripStatus>,
+            Without<StripTerminusBox>,
+            Without<StripTerminusName>,
+            Without<StripTerminusLatin>,
+        ),
+    >,
+    mut status: Query<
+        &mut Text2d,
+        (
+            With<StripStatus>,
+            Without<StripStop>,
+            Without<StripTerminusName>,
+            Without<StripTerminusLatin>,
+        ),
+    >,
+    mut terminus: Query<
+        (&mut Transform, &mut Visibility),
+        (With<StripTerminusBox>, Without<StripStop>),
+    >,
+    mut names: Query<&mut Text2d, (With<StripTerminusName>, Without<StripStop>)>,
+    mut latin: Query<
+        &mut Text2d,
+        (With<StripTerminusLatin>, Without<StripStop>, Without<StripTerminusName>),
+    >,
+) {
+    let run = runs.iter().next();
+    let stops: Vec<CityId> = run.map(|r| r.route().stops().collect()).unwrap_or_default();
+    let xs = stop_positions(&view, stops.len());
+    let reached = run.map_or(0, reached_count);
+
+    for (StripStop(slot), mut text, mut transform, mut visible, mut colour, mut font) in
+        &mut stops_text
+    {
+        match stops.get(*slot) {
+            Some(city) => {
+                let next = *slot == reached.min(stops.len().saturating_sub(1));
+                let passed = *slot < reached;
+                *visible = Visibility::Visible;
+                text.0 = station_label(*lang, rail.city(*city)).to_owned();
+                // Dimmed once it is behind you, bigger and bolder when it is
+                // the one coming up.
+                colour.0 = if passed && !next { theme::SLATE } else { Color::WHITE };
+                *font =
+                    if next { fonts.sign_bold(view.len(17.0)) } else { fonts.sign(view.len(14.0)) };
+                *transform = Transform::from_translation(
+                    (xs[*slot] + Vec2::new(0.0, view.len(16.0))).extend(2.0),
+                )
+                .with_rotation(Quat::from_rotation_z(40f32.to_radians()));
+            }
+            None => *visible = Visibility::Hidden,
+        }
+    }
+
+    let end = xs.last().copied();
+    let box_at = end.map(|at| at + Vec2::new(view.len(115.0), 0.0));
+
+    if let Ok((mut transform, mut visible)) = terminus.single_mut() {
+        match box_at {
+            Some(at) => {
+                *visible = Visibility::Visible;
+                *transform = Transform::from_translation(at.extend(1.0));
+            }
+            None => *visible = Visibility::Hidden,
+        }
+    }
+    if let Ok(mut text) = names.single_mut() {
+        text.0 = stops.last().map(|c| rail.city(*c).arabic.to_owned()).unwrap_or_default();
+    }
+    if let Ok(mut text) = latin.single_mut() {
+        text.0 = stops.last().map(|c| rail.city(*c).name.to_owned()).unwrap_or_default();
+    }
+
+    if let Ok(mut text) = status.single_mut() {
+        text.0 = match run {
+            None => lang.say(Phrase::WaitingForTicket).to_owned(),
+            Some(run) => {
+                let (phrase, city) = match run.phase() {
+                    Phase::Arrived => (Phrase::ArrivedAt, run.route().destination()),
+                    Phase::Running => (Phrase::InTransitTo, run.current_leg().to),
+                    _ => (Phrase::StandingAt, run.current_leg().from),
+                };
+                fill(lang.say(phrase), &[station_label(*lang, rail.city(city))])
+            }
+        };
+    }
+}
+
+/// A station's name in whichever script the interface is reading.
+fn station_label(lang: Language, city: &yafa_core::City) -> &'static str {
+    match lang {
+        Language::English => city.name,
+        Language::Arabic => city.arabic,
     }
 }
 
