@@ -138,6 +138,17 @@ impl Season {
         if blend < 0.5 { SEASONS[from].2 } else { SEASONS[to].2 }
     }
 
+    /// The same, as a phrase the strings table can translate.
+    pub fn phrase(through_year: f32) -> crate::strings::Phrase {
+        use crate::strings::Phrase;
+        match Self::name(through_year) {
+            "winter" => Phrase::Winter,
+            "spring" => Phrase::Spring,
+            "summer" => Phrase::Summer,
+            _ => Phrase::Autumn,
+        }
+    }
+
     /// The pair of seasons the year stands between, and how far across.
     ///
     /// The year starts in winter, so the position is taken straight from the
@@ -207,8 +218,10 @@ impl Fonts {
             sign_medium: medium.clone(),
             prose: regular,
             prose_strong: medium,
-            data: FontSource::List(vec![mono, arabic]),
-            data_strong: mono_strong,
+            data: FontSource::List(vec![mono, arabic.clone()]),
+            // Arabic behind this one too. Without it the few lines set in the
+            // heavier mono - the stamped notice, for one - come out as tofu.
+            data_strong: FontSource::List(vec![mono_strong, arabic]),
         }
     }
 

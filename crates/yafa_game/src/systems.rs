@@ -6,6 +6,7 @@ use bevy::ui_widgets::Activate;
 use yafa_core::{CityId, Journey, JourneyEvent, StampOutcome};
 
 use crate::components::*;
+use crate::strings::{Language, Phrase, fill};
 
 /// The last year any line actually opened. Anything dated later than this was
 /// laid by the player and has to be written back into the save.
@@ -65,6 +66,7 @@ pub fn keyboard_shortcuts(
 /// means.
 pub fn apply_actions(
     mut commands: Commands,
+    lang: Res<Language>,
     mut requests: MessageReader<ActionRequested>,
     mut desk: ResMut<Desk>,
     mut clock: ResMut<Clock>,
@@ -104,34 +106,42 @@ pub fn apply_actions(
                     continue;
                 }
                 if !rail.station_is_open(city, almanac.year()) {
-                    announcer.say(format!(
-                        "No line runs to {} in {}.",
-                        rail.city(city).name,
-                        almanac.year()
+                    announcer.say(fill(
+                        lang.say(Phrase::AnnNoLineTo),
+                        &[name(*lang, rail.city(city)), &almanac.year().to_string()],
                     ));
                     continue;
                 }
                 let _ = desk.select(city);
             }
             UiAction::ShowCity(city) => focus.0 = Some(city),
+            // Handled by `ui::apply_language_toggle`, which owns the resource.
+            UiAction::ToggleLanguage => {}
             UiAction::OpenLine(segment) => {
-                let (name, cost) = {
+                let (line_name, cost) = {
                     let track = rail.segment(segment);
                     (
-                        format!("{}-{}", rail.city(track.from).name, rail.city(track.to).name),
+                        format!(
+                            "{}-{}",
+                            name(*lang, rail.city(track.from)),
+                            name(*lang, rail.city(track.to))
+                        ),
                         counting.tariff.track(track.track_m),
                     )
                 };
                 if !counting.treasury.debit(cost) {
-                    announcer.say(format!(
-                        "The {name} line costs {cost} piastres; the railway has {}.",
-                        counting.treasury.balance()
+                    announcer.say(fill(
+                        lang.say(Phrase::AnnCannotAfford),
+                        &[&line_name, &cost.to_string(), &counting.treasury.balance().to_string()],
                     ));
                     continue;
                 }
                 let year = almanac.year();
                 if rail.0.open_line(segment, year) {
-                    announcer.say(format!("{year}: the {name} line is laid, for {cost} piastres."));
+                    announcer.say(fill(
+                        lang.say(Phrase::AnnLineLaid),
+                        &[&year.to_string(), &line_name, &cost.to_string()],
+                    ));
                 } else {
                     // Already built: hand the money straight back.
                     counting.treasury.credit(cost);
@@ -144,7 +154,12 @@ pub fn apply_actions(
             }
             UiAction::CycleClock => {
                 clock.cycle_clock();
-                announcer.say(format!("Timetable set to {} service.", clock.clock_label()));
+                let speed = lang.say(match clock.clock_label() {
+                    "Local" => Phrase::Local,
+                    "Mail" => Phrase::Mail,
+                    _ => Phrase::Express,
+                });
+                announcer.say(fill(lang.say(Phrase::AnnTimetable), &[speed]));
             }
             UiAction::Depart => {
                 if riding {
@@ -153,12 +168,14 @@ pub fn apply_actions(
                 let Some(route) = desk.issue(&rail, almanac.year()) else { continue };
                 let origin = route.origin();
                 let destination = route.destination();
-                announcer.say(format!(
-                    "Departing {} for {} - {:.0} km via {} stop(s).",
-                    rail.city(origin).name,
-                    rail.city(destination).name,
-                    route.total_km(),
-                    route.legs.len().saturating_sub(1),
+                announcer.say(fill(
+                    lang.say(Phrase::AnnDeparting),
+                    &[
+                        name(*lang, rail.city(origin)),
+                        name(*lang, rail.city(destination)),
+                        &format!("{:.0}", route.total_km()),
+                        &route.legs.len().saturating_sub(1).to_string(),
+                    ],
                 ));
 
                 // The passport is stamped on arrival at each station, and the
@@ -168,7 +185,7 @@ pub fn apply_actions(
 
                 let coal = counting.tariff.coal(route.total_m);
                 counting.treasury.credit(-coal);
-                announcer.say(format!("Coal for the run: {coal} piastres."));
+                announcer.say(fill(lang.say(Phrase::AnnCoal), &[&coal.to_string()]));
 
                 commands.entity(train).insert((
                     TrainRun(Journey::board(route, &clock.0)),
@@ -187,7 +204,7 @@ pub fn apply_actions(
                     .insert(Visibility::Hidden);
                 desk.clear();
                 phase.set(GamePhase::AtTheCounter);
-                announcer.say("Ticket counter open.");
+                announcer.say(lang.say(Phrase::AnnCounterOpen));
                 riding = false;
                 arrived = false;
             }
@@ -307,6 +324,7 @@ pub fn record_completed_journeys(
 /// Reads out each line as it comes into service.
 pub fn announce_openings(
     rail: Res<Rail>,
+    lang: Res<Language>,
     mut opened: MessageReader<LineOpened>,
     mut announcer: ResMut<Announcer>,
 ) {
@@ -325,10 +343,11 @@ pub fn announce_openings(
     for (year, names) in by_year {
         announcer.say(match names.as_slice() {
             [] => continue,
-            [one] => format!("{year}: the {one} line opens."),
-            [first, rest @ ..] => {
-                format!("{year}: the {first} line opens, and {} more with it.", rest.len())
-            }
+            [one] => fill(lang.say(Phrase::AnnLineOpens), &[&year.to_string(), one]),
+            [first, rest @ ..] => fill(
+                lang.say(Phrase::AnnLinesOpen),
+                &[&year.to_string(), first, &rest.len().to_string()],
+            ),
         });
     }
 }
@@ -374,6 +393,7 @@ pub fn save_passport(
 /// Turns the frame's messages into lines on the station board.
 pub fn announce(
     rail: Res<Rail>,
+    lang: Res<Language>,
     mut announcer: ResMut<Announcer>,
     mut focus: ResMut<Focus>,
     mut departures: MessageReader<TrainDeparted>,
@@ -381,7 +401,7 @@ pub fn announce(
     mut finished: MessageReader<JourneyFinished>,
 ) {
     for TrainDeparted(city) in departures.read() {
-        announcer.say(format!("Right away from {}.", rail.city(*city).name));
+        announcer.say(fill(lang.say(Phrase::AnnRightAway), &[name(*lang, rail.city(*city))]));
     }
 
     for stamp in stamps.read() {
@@ -390,23 +410,23 @@ pub fn announce(
         // they reach it.
         focus.0 = Some(stamp.city);
         if stamp.fresh {
-            announcer.say(format!(
-                "{} stamped - station {} of {}.",
-                city.name,
-                stamp.order,
-                yafa_core::CITY_COUNT
+            announcer.say(fill(
+                lang.say(Phrase::AnnStamped),
+                &[name(*lang, city), &stamp.order.to_string(), &yafa_core::CITY_COUNT.to_string()],
             ));
         } else {
-            announcer.say(format!("{} again; the stamp already stands.", city.name));
+            announcer.say(fill(lang.say(Phrase::AnnStampStands), &[name(*lang, city)]));
         }
     }
 
     for trip in finished.read() {
-        announcer.say(format!(
-            "Arrived {}. {:.0} km from {}.",
-            rail.city(trip.destination).name,
-            trip.track_m as f32 / 1000.0,
-            rail.city(trip.origin).name,
+        announcer.say(fill(
+            lang.say(Phrase::AnnArrived),
+            &[
+                name(*lang, rail.city(trip.destination)),
+                &format!("{:.0}", trip.track_m as f32 / 1000.0),
+                name(*lang, rail.city(trip.origin)),
+            ],
         ));
     }
 }
@@ -431,14 +451,14 @@ pub fn opening_announcement(
 /// Says what year it is, and what that means for the map.
 pub fn opening_year_announcement(
     rail: Res<Rail>,
+    lang: Res<Language>,
     almanac: Res<Almanac>,
     mut announcer: ResMut<Announcer>,
 ) {
     let open = rail.open_stations(almanac.year()).count();
-    announcer.say(format!(
-        "{}. {open} of {} stations are on the network.",
-        almanac.year(),
-        yafa_core::CITY_COUNT
+    announcer.say(fill(
+        lang.say(Phrase::AnnYearStanding),
+        &[&almanac.year().to_string(), &open.to_string(), &yafa_core::CITY_COUNT.to_string()],
     ));
 }
 
@@ -505,20 +525,26 @@ pub fn work_the_doors(
 /// Reads the takings out on the board.
 pub fn announce_takings(
     rail: Res<Rail>,
+    lang: Res<Language>,
     mut takings: MessageReader<Takings>,
     mut announcer: ResMut<Announcer>,
 ) {
     for take in takings.read() {
         let Some(city) = take.at else { continue };
-        let who = if take.passengers == 1 {
-            "one passenger".to_owned()
-        } else {
-            format!("{} passengers", take.passengers)
-        };
-        announcer.say(format!(
-            "Set down {who} at {} - {} piastres.",
-            rail.city(city).name,
-            take.piastres,
+        // Just the count: "one passenger" and "N passengers" would need a
+        // plural rule per language, and the number alone reads fine in both.
+        let who = take.passengers.to_string();
+        announcer.say(fill(
+            lang.say(Phrase::AnnSetDown),
+            &[&who, name(*lang, rail.city(city)), &take.piastres.to_string()],
         ));
+    }
+}
+
+/// A station's name, in the language showing.
+fn name(lang: Language, city: &yafa_core::City) -> &'static str {
+    match lang {
+        Language::English => city.name,
+        Language::Arabic => city.arabic,
     }
 }

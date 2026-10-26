@@ -20,6 +20,7 @@ use bevy::ui_widgets::Button;
 use yafa_core::{CityId, LineType, Network, Phase};
 
 use crate::components::*;
+use crate::strings::{Language, Phrase, fill};
 use crate::theme::{self, Fonts};
 
 const LEFT_WIDTH: f32 = 318.0;
@@ -36,13 +37,24 @@ const CARD_HEIGHT: f32 = 48.0;
 // --- Construction ---------------------------------------------------------
 
 /// Lays out the whole interface.
-pub fn build_ui(mut commands: Commands, rail: Res<Rail>, fonts: Res<Fonts>) {
+pub fn build_ui(mut commands: Commands, rail: Res<Rail>, fonts: Res<Fonts>, lang: Res<Language>) {
+    let lang = *lang;
+    // Recorded here rather than inferred later: this is the language the
+    // interface standing on screen is actually written in.
+    commands.insert_resource(BuiltLanguage(lang));
     commands
         .spawn((
+            InterfaceRoot,
             Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
+                // Arabic reads right to left, so the whole column order turns
+                // round with it and the ticket counter ends up where the eye
+                // starts. `Rtl` alone does that - it reverses the main axis
+                // the way CSS does, and pairing it with `RowReverse` reverses
+                // the reversal and leaves the layout exactly as it was.
+                direction: if lang.is_rtl() { InlineDirection::Rtl } else { InlineDirection::Ltr },
                 justify_content: JustifyContent::SpaceBetween,
                 align_items: AlignItems::Stretch,
                 padding: UiRect::all(Val::Px(14.0)),
@@ -55,15 +67,15 @@ pub fn build_ui(mut commands: Commands, rail: Res<Rail>, fonts: Res<Fonts>) {
             Name::new("Interface"),
         ))
         .with_children(|root| {
-            ticket_counter(root, &rail, &fonts);
-            centre_column(root, &fonts);
-            right_column(root, &rail, &fonts);
+            ticket_counter(root, &rail, &fonts, lang);
+            centre_column(root, &fonts, lang);
+            right_column(root, &rail, &fonts, lang);
         });
 }
 
 // --- Ticket counter -------------------------------------------------------
 
-fn ticket_counter(root: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
+fn ticket_counter(root: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts, lang: Language) {
     root.spawn((
         Node { width: Val::Px(LEFT_WIDTH), flex_direction: FlexDirection::Column, ..default() },
         Pickable::IGNORE,
@@ -74,27 +86,27 @@ fn ticket_counter(root: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts
             .with_children(|panel| {
                 panel.spawn(theme::panel_header(
                     fonts,
-                    "Ticket Counter",
-                    "Choose where you board and where you are bound",
+                    lang.say(Phrase::TicketCounter),
+                    lang.say(Phrase::TicketCounterNote),
                 ));
-                ticket_stub(panel, fonts);
+                ticket_stub(panel, fonts, lang);
                 panel.spawn((
                     TicketRouteText,
-                    Text::new("Select a departure station"),
+                    Text::new(lang.say(Phrase::SelectDeparture)),
                     fonts.data(theme::CAPTION),
                     TextColor(theme::INK_SOFT),
                     LineHeight::RelativeToFont(1.45),
                     Pickable::IGNORE,
                 ));
-                control_row(panel, fonts);
-                station_list(panel, rail, fonts);
-                keyboard_hints(panel, fonts);
+                control_row(panel, fonts, lang);
+                station_list(panel, rail, fonts, lang);
+                keyboard_hints(panel, fonts, lang);
             });
     });
 }
 
 /// The two boxes on the ticket itself.
-fn ticket_stub(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
+fn ticket_stub(panel: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
     panel
         .spawn((
             Node {
@@ -106,8 +118,8 @@ fn ticket_stub(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
             Pickable::IGNORE,
         ))
         .with_children(|row| {
-            slot_box(row, fonts, "From", TicketSlot::Origin, theme::VISITED);
-            slot_box(row, fonts, "To", TicketSlot::Destination, theme::PENDING);
+            slot_box(row, fonts, lang.say(Phrase::From), TicketSlot::Origin, theme::VISITED);
+            slot_box(row, fonts, lang.say(Phrase::To), TicketSlot::Destination, theme::PENDING);
         });
 }
 
@@ -149,7 +161,7 @@ fn slot_box(
     ));
 }
 
-fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
+fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
     panel
         .spawn((
             Node {
@@ -166,7 +178,7 @@ fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 DepartButton,
                 Node { flex_grow: 1.0, ..control_node() },
                 children![(
-                    Text::new("Depart"),
+                    Text::new(lang.say(Phrase::Depart)),
                     fonts.sign_bold(theme::BODY),
                     TextColor(theme::INK),
                     Pickable::IGNORE,
@@ -176,7 +188,7 @@ fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 control_chrome(UiAction::ClearTicket),
                 control_node(),
                 children![(
-                    Text::new("Clear"),
+                    Text::new(lang.say(Phrase::Clear)),
                     fonts.sign(theme::BODY),
                     TextColor(theme::INK_SOFT),
                     Pickable::IGNORE,
@@ -187,7 +199,7 @@ fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 control_node(),
                 children![(
                     ClockLabel,
-                    Text::new("Express"),
+                    Text::new(lang.say(Phrase::Express)),
                     fonts.sign(theme::BODY),
                     TextColor(theme::INK_SOFT),
                     Pickable::IGNORE,
@@ -197,7 +209,7 @@ fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
 }
 
 /// The shortcuts, set at the foot of the counter where there is room for them.
-fn keyboard_hints(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
+fn keyboard_hints(panel: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
     panel.spawn((
         Node {
             flex_direction: FlexDirection::Column,
@@ -210,7 +222,7 @@ fn keyboard_hints(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
         children![
             theme::double_rule(),
             (
-                Text::new("Space depart · Esc clear · Tab timetable"),
+                Text::new(lang.say(Phrase::Shortcuts)),
                 fonts.data(theme::CAPTION),
                 TextColor(theme::INK_FAINT),
                 Pickable::IGNORE,
@@ -220,7 +232,7 @@ fn keyboard_hints(panel: &mut ChildSpawnerCommands, fonts: &Fonts) {
 }
 
 /// Every station, grouped by the corridor it belongs to.
-fn station_list(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
+fn station_list(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts, lang: Language) {
     panel
         .spawn((
             StationList,
@@ -255,7 +267,7 @@ fn station_list(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts)
                             Pickable::IGNORE,
                         ),
                         (
-                            Text::new(line.label().to_owned()),
+                            Text::new(corridor(lang, line).to_owned()),
                             fonts.data(theme::CAPTION),
                             TextColor(theme::INK_SOFT),
                             Pickable::IGNORE,
@@ -264,7 +276,7 @@ fn station_list(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts)
                 ));
 
                 for city in rail.cities_on(line) {
-                    station_row(list, fonts, city.id, city.name, city.exonym);
+                    station_row(list, fonts, city.id, station_name(lang, city), city.exonym);
                 }
             }
         });
@@ -329,7 +341,7 @@ fn station_row(
 
 // --- Centre: the title and the station board ------------------------------
 
-fn centre_column(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
+fn centre_column(root: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
     root.spawn((
         Node {
             flex_grow: 1.0,
@@ -341,15 +353,15 @@ fn centre_column(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
         Pickable::IGNORE,
     ))
     .with_children(|centre| {
-        header_bar(centre, fonts);
+        header_bar(centre, fonts, lang);
 
-        station_board(centre, fonts);
+        station_board(centre, fonts, lang);
     });
 }
 
 /// The bar over the map: what the game is called, what year it is, and how
 /// much of the country has been seen.
-fn header_bar(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
+fn header_bar(centre: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
     centre
         .spawn((
             Node {
@@ -374,7 +386,7 @@ fn header_bar(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
                         Pickable::IGNORE,
                     ),
                     (
-                        Text::new("the railways of historical Palestine"),
+                        Text::new(lang.say(Phrase::Subtitle)),
                         fonts.prose(theme::CAPTION),
                         TextColor(theme::INK_FAINT),
                         Pickable::IGNORE,
@@ -429,12 +441,26 @@ fn header_bar(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
                         TextColor(theme::INK_SOFT),
                         Pickable::IGNORE,
                     ),
+                    (
+                        control_chrome(UiAction::ToggleLanguage),
+                        control_node(),
+                        children![(
+                            LanguageToggleLabel,
+                            // Written in the language it switches to: the
+                            // control has to be legible to somebody who
+                            // cannot read the one currently showing.
+                            Text::new(lang.toggle_label()),
+                            fonts.sign(theme::BODY),
+                            TextColor(theme::INK_HEADER),
+                            Pickable::IGNORE,
+                        )],
+                    ),
                 ],
             ));
         });
 }
 
-fn station_board(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
+fn station_board(centre: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
     centre
         .spawn((Node { width: Val::Px(BOARD_WIDTH), ..theme::panel_node() }, theme::panel_chrome()))
         .with_children(|panel| {
@@ -442,14 +468,14 @@ fn station_board(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
             // map's southern end that disappears behind it.
             panel.spawn((
                 BoardStatus,
-                Text::new("Waiting for a ticket"),
+                Text::new(lang.say(Phrase::WaitingForTicket)),
                 fonts.sign(theme::HEADING),
                 TextColor(theme::INK),
                 Pickable::IGNORE,
             ));
             panel.spawn((
                 BoardDetail,
-                Text::new("The counter is open."),
+                Text::new(lang.say(Phrase::CounterOpen)),
                 fonts.prose(theme::CAPTION),
                 TextColor(theme::INK_SOFT),
                 LineHeight::RelativeToFont(1.4),
@@ -500,7 +526,7 @@ fn progress_bar(panel: &mut ChildSpawnerCommands, fill: impl Component, color: C
 
 // --- Right: the city panel and the passport -------------------------------
 
-fn right_column(root: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
+fn right_column(root: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts, lang: Language) {
     root.spawn((
         Node {
             width: Val::Px(RIGHT_WIDTH),
@@ -516,14 +542,14 @@ fn right_column(root: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) 
         column
             .spawn((Node { width: Val::Percent(100.0), ..default() }, Pickable::IGNORE))
             .with_children(|slot| {
-                city_panel(slot, fonts);
-                arrival_card(slot, fonts);
+                city_panel(slot, fonts, lang);
+                arrival_card(slot, fonts, lang);
             });
-        passport_panel(column, rail, fonts);
+        passport_panel(column, rail, fonts, lang);
     });
 }
 
-fn city_panel(column: &mut ChildSpawnerCommands, fonts: &Fonts) {
+fn city_panel(column: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
     column.spawn((
         CityPanelSheet,
         theme::panel_node(),
@@ -531,8 +557,8 @@ fn city_panel(column: &mut ChildSpawnerCommands, fonts: &Fonts) {
         children![
             theme::panel_header(
                 fonts,
-                "About the City",
-                "Click any station, on the map or in the list"
+                lang.say(Phrase::AboutTheCity),
+                lang.say(Phrase::AboutTheCityNote)
             ),
             (
                 CityPanelPart::Name,
@@ -645,7 +671,7 @@ fn track_list(fonts: &Fonts) -> impl Bundle {
 ///
 /// Laid over the city card rather than beside it, so it covers the panel it
 /// stands in for instead of pushing the passport down the column.
-fn arrival_card(slot: &mut ChildSpawnerCommands, fonts: &Fonts) {
+fn arrival_card(slot: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
     slot.spawn((
         ArrivalCard::default(),
         Node {
@@ -663,7 +689,7 @@ fn arrival_card(slot: &mut ChildSpawnerCommands, fonts: &Fonts) {
         Pickable { should_block_lower: true, is_hoverable: false },
         children![
             (
-                Text::new("Arrived"),
+                Text::new(lang.say(Phrase::Arrived)),
                 fonts.data(theme::CAPTION),
                 TextColor(theme::VISITED),
                 Pickable::IGNORE,
@@ -694,18 +720,23 @@ fn arrival_card(slot: &mut ChildSpawnerCommands, fonts: &Fonts) {
     ));
 }
 
-fn passport_panel(column: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
+fn passport_panel(
+    column: &mut ChildSpawnerCommands,
+    rail: &Network,
+    fonts: &Fonts,
+    lang: Language,
+) {
     column
         .spawn((Node { flex_grow: 1.0, ..theme::panel_node() }, theme::panel_chrome()))
         .with_children(|panel| {
             panel.spawn(theme::panel_header(
                 fonts,
-                "Passport",
-                "One stamp for every station called at",
+                lang.say(Phrase::Passport),
+                lang.say(Phrase::PassportNote),
             ));
             panel.spawn((
                 PassportCounter,
-                Text::new("Visited cities  0 / 11"),
+                Text::new(lang.say(Phrase::VisitedCities)),
                 fonts.sign(theme::HEADING),
                 TextColor(theme::INK),
                 Pickable::IGNORE,
@@ -725,7 +756,7 @@ fn passport_panel(column: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fon
                 TextColor(theme::INK_FAINT),
                 Pickable::IGNORE,
             ));
-            stamp_grid(panel, rail, fonts);
+            stamp_grid(panel, rail, fonts, lang);
             panel.spawn((
                 PassportRemaining,
                 Text::new(""),
@@ -739,7 +770,7 @@ fn passport_panel(column: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fon
 }
 
 /// The grid of stamp cards, one per station, locked until it is earned.
-fn stamp_grid(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
+fn stamp_grid(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts, lang: Language) {
     panel
         .spawn((
             Node {
@@ -808,7 +839,7 @@ fn stamp_grid(panel: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
                             ],
                         ),
                         (
-                            Text::new(data.name),
+                            Text::new(station_name(lang, data)),
                             fonts.prose(theme::CAPTION),
                             TextColor(theme::INK_SOFT),
                             Pickable::IGNORE,
@@ -872,6 +903,7 @@ pub fn style_controls(
 /// Writes the ticket, and keeps the station list in step with it.
 pub fn refresh_ticket(
     rail: Res<Rail>,
+    lang: Res<Language>,
     desk: Res<Desk>,
     clock: Res<Clock>,
     book: Res<PassportBook>,
@@ -893,7 +925,8 @@ pub fn refresh_ticket(
             TicketSlot::Origin => desk.origin,
             TicketSlot::Destination => desk.destination,
         };
-        text.0 = city.map_or_else(|| "-".to_owned(), |c| rail.city(c).name.to_owned());
+        text.0 =
+            city.map_or_else(|| "-".to_owned(), |c| station_name(*lang, rail.city(c)).to_owned());
     }
 
     if let Ok(mut text) = route_text.single_mut() {
@@ -922,12 +955,27 @@ pub fn refresh_ticket(
                 rail.city(desk.destination.unwrap()).name,
                 almanac.year(),
             ),
-            None => desk.summary(&rail),
+            // The desk's own summary is written in English; the counter has
+            // to say the same thing in whichever language is showing.
+            None => match (desk.origin, desk.destination) {
+                (None, _) => lang.say(Phrase::SelectDeparture).to_owned(),
+                (Some(origin), None) => fill(
+                    lang.say(Phrase::FromSelectDestination),
+                    &[station_name(*lang, rail.city(origin))],
+                ),
+                (Some(origin), Some(destination)) => fill(
+                    lang.say(Phrase::TicketPair),
+                    &[
+                        station_name(*lang, rail.city(origin)),
+                        station_name(*lang, rail.city(destination)),
+                    ],
+                ),
+            },
         };
     }
 
     if let Ok(mut text) = clock_label.single_mut() {
-        text.0 = clock.clock_label().to_owned();
+        text.0 = speed_name(*lang, clock.clock_label()).to_owned();
     }
 
     for (StationRow(city), hovered, mut background, mut border) in &mut rows {
@@ -956,7 +1004,7 @@ pub fn refresh_ticket(
         } else if book.passport.is_stamped(*city) {
             ("✓", theme::VISITED)
         } else if !rail.station_is_open(*city, almanac.year()) {
-            ("no line", theme::INK_FAINT)
+            (lang.say(Phrase::NoLine), theme::INK_FAINT)
         } else {
             ("", theme::INK_FAINT)
         };
@@ -976,6 +1024,7 @@ pub fn refresh_ticket(
 /// Keeps the header bar current.
 pub fn refresh_header(
     rail: Res<Rail>,
+    lang: Res<Language>,
     almanac: Res<Almanac>,
     book: Res<PassportBook>,
     counting: Res<Counting>,
@@ -994,7 +1043,7 @@ pub fn refresh_header(
     mut count: Query<&mut Text, With<HeaderCount>>,
 ) {
     if let Ok(mut text) = balance.single_mut() {
-        text.0 = format!("{} pi", counting.treasury.balance());
+        text.0 = fill(lang.say(Phrase::Piastres), &[&counting.treasury.balance().to_string()]);
     }
     if let Ok(mut text) = year.single_mut() {
         text.0 = almanac.year().to_string();
@@ -1002,14 +1051,22 @@ pub fn refresh_header(
     if let Ok(mut text) = season.single_mut() {
         // Named, because an unexplained shift in the light is just a bug the
         // player cannot report.
-        text.0 = theme::Season::name(almanac.through_year()).to_owned();
+        text.0 = lang.say(theme::Season::phrase(almanac.through_year())).to_owned();
     }
     if let Ok(mut text) = count.single_mut() {
         text.0 = format!(
-            "{} / {} stamped\n{} stations on the network",
-            book.passport.visited_count(),
-            book.passport.total_cities(),
-            rail.open_stations(almanac.year()).count(),
+            "{}\n{}",
+            fill(
+                lang.say(Phrase::Stamped),
+                &[
+                    &book.passport.visited_count().to_string(),
+                    &book.passport.total_cities().to_string(),
+                ]
+            ),
+            fill(
+                lang.say(Phrase::OnTheNetwork),
+                &[&rail.open_stations(almanac.year()).count().to_string(),]
+            ),
         );
     }
 }
@@ -1017,6 +1074,7 @@ pub fn refresh_header(
 /// Keeps the station board current.
 pub fn refresh_board(
     rail: Res<Rail>,
+    lang: Res<Language>,
     clock: Res<Clock>,
     announcer: Res<Announcer>,
     runs: Query<&TrainRun>,
@@ -1035,7 +1093,7 @@ pub fn refresh_board(
     >,
     mut announcements: Query<&mut Text, (With<BoardAnnouncements>, Without<BoardRiders>)>,
     mut aboard: Query<&mut Text, With<BoardRiders>>,
-    mut fill: Query<&mut Node, With<BoardProgressFill>>,
+    mut bar: Query<&mut Node, With<BoardProgressFill>>,
     riders: Query<&Riders>,
     queues: Res<Queues>,
 ) {
@@ -1043,40 +1101,45 @@ pub fn refresh_board(
 
     if let Ok(mut text) = aboard.single_mut() {
         text.0 = match riders.iter().next() {
-            Some(riders) => {
-                format!("{} aboard of {} seats", riders.len(), yafa_core::traffic::TRAIN_CAPACITY)
+            Some(riders) => fill(
+                lang.say(Phrase::Aboard),
+                &[&riders.len().to_string(), &yafa_core::traffic::TRAIN_CAPACITY.to_string()],
+            ),
+            None => {
+                fill(lang.say(Phrase::WaitingOnPlatforms), &[&queues.total_waiting().to_string()])
             }
-            None => format!("{} waiting on the platforms", queues.total_waiting()),
         };
     }
 
     let (headline, body, progress) = match run {
         None => (
-            "Waiting for a ticket".to_owned(),
-            "The counter is open. Pick a departure and a destination.".to_owned(),
+            lang.say(Phrase::WaitingForTicket).to_owned(),
+            lang.say(Phrase::CounterOpen).to_owned(),
             0.0,
         ),
         Some(run) => {
             let leg = run.current_leg();
-            let headline = match run.phase() {
-                Phase::Boarding => format!("Boarding at {}", rail.city(leg.from).name),
-                Phase::Running => format!("In transit to {}", rail.city(leg.to).name),
-                Phase::Dwelling => format!("Standing at {}", rail.city(leg.from).name),
-                Phase::Arrived => {
-                    format!("Arrived at {}", rail.city(run.route().destination()).name)
-                }
+            let headline = {
+                let (phrase, at) = match run.phase() {
+                    Phase::Boarding => (Phrase::BoardingAt, leg.from),
+                    Phase::Running => (Phrase::InTransitTo, leg.to),
+                    Phase::Dwelling => (Phrase::StandingAt, leg.from),
+                    Phase::Arrived => (Phrase::ArrivedAt, run.route().destination()),
+                };
+                fill(lang.say(phrase), &[station_name(*lang, rail.city(at))])
             };
             let body = match run.phase() {
-                Phase::Arrived => format!(
-                    "{:.0} km run complete. Depart again, or press Space, for a new ticket.",
-                    run.travelled_km()
-                ),
-                _ => format!(
-                    "{} - {:.0} km run, {:.0} km to go, about {:.0} min on the timetable.",
-                    leg.line.label(),
-                    run.travelled_km(),
-                    run.remaining_km(),
-                    run.eta_minutes(&clock.0),
+                Phase::Arrived => {
+                    fill(lang.say(Phrase::RunComplete), &[&format!("{:.0}", run.travelled_km())])
+                }
+                _ => fill(
+                    lang.say(Phrase::RunProgress),
+                    &[
+                        corridor(*lang, leg.line),
+                        &format!("{:.0}", run.travelled_km()),
+                        &format!("{:.0}", run.remaining_km()),
+                        &format!("{:.0}", run.eta_minutes(&clock.0)),
+                    ],
                 ),
             };
             (headline, body, run.progress())
@@ -1089,7 +1152,7 @@ pub fn refresh_board(
     if let Ok(mut text) = detail.single_mut() {
         text.0 = body;
     }
-    if let Ok(mut node) = fill.single_mut() {
+    if let Ok(mut node) = bar.single_mut() {
         node.width = Val::Percent(progress * 100.0);
     }
     if let Ok(mut text) = announcements.single_mut() {
@@ -1100,6 +1163,7 @@ pub fn refresh_board(
 /// Fills the "About the City" panel from whichever station has focus.
 pub fn refresh_city_panel(
     rail: Res<Rail>,
+    lang: Res<Language>,
     focus: Res<Focus>,
     book: Res<PassportBook>,
     mut parts: Query<(&CityPanelPart, &mut Text, &mut TextColor)>,
@@ -1110,17 +1174,15 @@ pub fn refresh_city_panel(
 
     for (part, mut text, mut color) in &mut parts {
         text.0 = match part {
-            CityPanelPart::Name => data.name.to_owned(),
+            CityPanelPart::Name => station_name(*lang, data).to_owned(),
             CityPanelPart::Subtitle => {
                 let exonym = data.exonym.map_or_else(String::new, |e| format!("{e}  ·  "));
-                format!("{exonym}{}  ·  {}", data.line_type.label(), city.code())
+                format!("{exonym}{}  ·  {}", corridor(*lang, data.line_type), city.code())
             }
             CityPanelPart::Fact => data.historical_fact.to_owned(),
             CityPanelPart::Stamped => match stamp {
-                Some(stamp) => {
-                    format!("Stamped - the {} station in this passport", ordinal(stamp.order))
-                }
-                None => "Not yet visited - buy a ticket through here".to_owned(),
+                Some(stamp) => fill(lang.say(Phrase::StampedNth), &[&ordinal(*lang, stamp.order)]),
+                None => lang.say(Phrase::NotYetVisited).to_owned(),
             },
         };
 
@@ -1134,6 +1196,7 @@ pub fn refresh_city_panel(
 /// Keeps the passport counter, bar, summary and stamp cards current.
 pub fn refresh_passport(
     rail: Res<Rail>,
+    lang: Res<Language>,
     book: Res<PassportBook>,
     mut counter: Query<
         &mut Text,
@@ -1150,7 +1213,7 @@ pub fn refresh_passport(
     >,
     mut odometer: Query<&mut Text, (With<PassportOdometer>, Without<PassportRemaining>)>,
     mut remaining: Query<&mut Text, With<PassportRemaining>>,
-    mut fill: Query<&mut Node, With<PassportFill>>,
+    mut bar: Query<&mut Node, With<PassportFill>>,
     mut cards: Query<(&StampCard, &mut BackgroundColor, &mut BorderColor)>,
     mut codes: Query<(&StampCardCode, &mut TextColor)>,
     mut orders: Query<
@@ -1167,10 +1230,12 @@ pub fn refresh_passport(
     let passport = &book.passport;
 
     if let Ok(mut text) = counter.single_mut() {
-        text.0 =
-            format!("Visited cities  {} / {}", passport.visited_count(), passport.total_cities());
+        text.0 = fill(
+            lang.say(Phrase::VisitedCities),
+            &[&passport.visited_count().to_string(), &passport.total_cities().to_string()],
+        );
     }
-    if let Ok(mut node) = fill.single_mut() {
+    if let Ok(mut node) = bar.single_mut() {
         node.width = Val::Percent(passport.completion() * 100.0);
     }
     if let Ok(mut text) = lines.single_mut() {
@@ -1190,10 +1255,12 @@ pub fn refresh_passport(
             .join("    ");
     }
     if let Ok(mut text) = odometer.single_mut() {
-        text.0 = format!(
-            "{} journeys  ·  {:.0} km of track behind you",
-            passport.journeys_completed(),
-            passport.total_track_km(),
+        text.0 = fill(
+            lang.say(Phrase::Odometer),
+            &[
+                &passport.journeys_completed().to_string(),
+                &format!("{:.0}", passport.total_track_km()),
+            ],
         );
     }
 
@@ -1202,12 +1269,13 @@ pub fn refresh_passport(
         text.0 = match left.split_first() {
             // Name a few, so there is always somewhere obvious to go next.
             Some((_, _)) => {
-                let names: Vec<&str> = left.iter().take(3).map(|&c| rail.city(c).name).collect();
+                let names: Vec<&str> =
+                    left.iter().take(3).map(|&c| station_name(*lang, rail.city(c))).collect();
                 let more = left.len().saturating_sub(names.len());
-                let tail = if more > 0 { format!(", and {more} more") } else { String::new() };
-                format!("Still to call at: {}{tail}.", names.join(", "))
+                let tail = if more > 0 { format!(" (+{more})") } else { String::new() };
+                fill(lang.say(Phrase::StillToCallAt), &[&names.join(", "), &tail])
             }
-            None => "Every station on the network is stamped.".to_owned(),
+            None => lang.say(Phrase::AllStamped).to_owned(),
         };
     }
 
@@ -1279,8 +1347,12 @@ pub fn run_stamp_flash(
     }
 }
 
-/// "first", "second", ... for the stamp wording.
-fn ordinal(order: u32) -> String {
+/// "first", "second", ... for the stamp wording. Arabic takes the numeral,
+/// which is how it would be written there anyway.
+fn ordinal(lang: Language, order: u32) -> String {
+    if lang.is_rtl() {
+        return order.to_string();
+    }
     const NAMES: [&str; 11] = [
         "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth",
         "tenth", "eleventh",
@@ -1320,6 +1392,7 @@ pub fn scroll_station_list(
 /// Fills the city card's track list, and offers to lay what is still on paper.
 pub fn refresh_track_list(
     rail: Res<Rail>,
+    lang: Res<Language>,
     focus: Res<Focus>,
     almanac: Res<Almanac>,
     counting: Res<Counting>,
@@ -1380,7 +1453,7 @@ pub fn refresh_track_list(
     for (CityLinkBuyLabel(index), mut text, mut color) in &mut labels {
         match links.get(*index).and_then(|(_, offer)| *offer) {
             Some((_, cost, affordable)) => {
-                text.0 = format!("Lay  {cost} pi");
+                text.0 = fill(lang.say(Phrase::LayLine), &[&cost.to_string()]);
                 color.0 = if affordable { theme::VISITED } else { theme::INK_FAINT };
             }
             None => text.0.clear(),
@@ -1409,10 +1482,8 @@ pub fn run_arrival_card(
         let data = rail.city(latest.city);
         for (part, mut text) in &mut parts {
             text.0 = match part {
-                ArrivalPart::Name => match data.exonym {
-                    Some(exonym) => format!("{}  ·  {exonym}", data.name),
-                    None => data.name.to_owned(),
-                },
+                // Both names on the card, whichever way the interface reads.
+                ArrivalPart::Name => data.name.to_owned(),
                 ArrivalPart::Arabic => data.arabic.to_owned(),
                 ArrivalPart::Fact => data.historical_fact.to_owned(),
             };
@@ -1435,4 +1506,91 @@ pub fn run_arrival_card(
         city.display = Display::None;
     }
     transform.translation = Val2::new(Val::Px(card.offset(RIGHT_WIDTH)), Val::Px(0.0));
+}
+
+/// What a corridor is called, in the language showing.
+fn corridor(lang: Language, line: LineType) -> &'static str {
+    lang.say(match line {
+        LineType::Coastal => Phrase::CoastalLine,
+        LineType::Mountain => Phrase::MountainLine,
+        LineType::Junction => Phrase::JunctionLinks,
+    })
+}
+
+/// A station's name, in the language showing.
+fn station_name(lang: Language, city: &yafa_core::City) -> &'static str {
+    match lang {
+        Language::English => city.name,
+        Language::Arabic => city.arabic,
+    }
+}
+
+/// Tears the interface down and builds it again in the other language.
+///
+/// Rebuilding rather than re-labelling: the language changes the column order
+/// and the direction of every line of text as well as the words, and there is
+/// no part of the layout it leaves alone. The refresh systems repopulate the
+/// live readouts on the next frame.
+pub fn rebuild_on_language_change(
+    mut commands: Commands,
+    lang: Res<Language>,
+    built: Option<Res<BuiltLanguage>>,
+    roots: Query<Entity, With<InterfaceRoot>>,
+) {
+    // Compared against what `build_ui` actually built, not against change
+    // detection and not against the first language this system happens to
+    // see. A toggle that lands before this system's first run would otherwise
+    // be recorded as already done and silently dropped.
+    let Some(built) = built else { return };
+    if built.0 == *lang {
+        return;
+    }
+    for root in &roots {
+        commands.entity(root).despawn();
+    }
+    commands.run_system_cached(build_ui);
+    // The board's log was written in the old language and cannot be
+    // re-rendered, so it starts again rather than standing there in a script
+    // the player has just switched away from.
+    commands.run_system_cached(restart_announcements);
+}
+
+/// Swaps the language when the toggle is used.
+pub fn apply_language_toggle(
+    mut requests: MessageReader<ActionRequested>,
+    mut lang: ResMut<Language>,
+) {
+    for &ActionRequested(action) in requests.read() {
+        if action == UiAction::ToggleLanguage {
+            *lang = lang.other();
+        }
+    }
+}
+
+/// What a timetable speed is called, in the language showing.
+fn speed_name(lang: Language, preset: &str) -> &'static str {
+    lang.say(match preset {
+        "Local" => Phrase::Local,
+        "Mail" => Phrase::Mail,
+        _ => Phrase::Express,
+    })
+}
+
+/// Empties the board and says where things stand, in the language showing.
+pub fn restart_announcements(
+    rail: Res<Rail>,
+    almanac: Res<Almanac>,
+    lang: Res<Language>,
+    mut announcer: ResMut<Announcer>,
+) {
+    announcer.clear();
+    announcer.say(fill(
+        lang.say(Phrase::AnnYearStanding),
+        &[
+            &almanac.year().to_string(),
+            &rail.open_stations(almanac.year()).count().to_string(),
+            &yafa_core::CITY_COUNT.to_string(),
+        ],
+    ));
+    announcer.say(lang.say(Phrase::AnnCounterOpen));
 }

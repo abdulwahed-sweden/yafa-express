@@ -34,6 +34,7 @@
 
 pub mod components;
 pub mod map;
+pub mod strings;
 pub mod systems;
 pub mod theme;
 pub mod ui;
@@ -109,6 +110,7 @@ impl Plugin for SimulationPlugin {
             .init_resource::<Announcer>()
             .init_resource::<JourneyScratch>()
             .init_resource::<TrafficTimer>()
+            .init_resource::<strings::Language>()
             .insert_resource(Counting { treasury: self.passport.treasury, ..default() })
             .insert_resource(Queues(yafa_core::Platforms::new(yafa_core::Rng::seeded(
                 self.traffic_seed,
@@ -187,6 +189,8 @@ impl Plugin for PresentationPlugin {
                     ui::refresh_city_panel,
                     ui::refresh_track_list,
                     ui::run_arrival_card,
+                    ui::apply_language_toggle,
+                    ui::rebuild_on_language_change,
                     ui::refresh_passport,
                     ui::flash_new_stamps,
                     // The flash paints over the card colour the refresh just

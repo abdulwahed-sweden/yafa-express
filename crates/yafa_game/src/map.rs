@@ -14,6 +14,7 @@ use bevy::sprite_render::ColorMaterial;
 use yafa_core::{CityId, GeoPoint, Label, LabelSide, LineType, Network, coast};
 
 use crate::components::*;
+use crate::strings::Language;
 use crate::theme::{self, Fonts};
 
 /// Pixels of map for one kilometre of ground.
@@ -556,8 +557,9 @@ pub fn draw_station_rings(
 pub fn refresh_station_state(
     rail: Res<Rail>,
     almanac: Res<Almanac>,
+    lang: Res<Language>,
     mut faces: Query<(&StationFace, &mut Sprite)>,
-    mut labels: Query<(&StationLabel, &mut TextColor)>,
+    mut labels: Query<(&StationLabel, &mut TextColor, &mut Text2d)>,
 ) {
     for (face, mut sprite) in &mut faces {
         let open = rail.station_is_open(face.city, almanac.year());
@@ -568,12 +570,22 @@ pub fn refresh_station_state(
             (false, false) => theme::BORDER,
         };
     }
-    for (StationLabel(city), mut color) in &mut labels {
+    for (StationLabel(city), mut color, mut text) in &mut labels {
         color.0 = if rail.station_is_open(*city, almanac.year()) {
             theme::MAP_INK
         } else {
             theme::INK_FAINT
         };
+        // The names on the map read in whichever script the rest of the
+        // interface does.
+        let data = rail.city(*city);
+        let name = match *lang {
+            Language::English => data.name,
+            Language::Arabic => data.arabic,
+        };
+        if text.0 != name {
+            text.0 = name.to_owned();
+        }
     }
 }
 

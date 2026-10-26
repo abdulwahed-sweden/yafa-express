@@ -72,6 +72,11 @@ impl Announcer {
     /// every line it grows is a line of coast it hides.
     const CAPACITY: usize = 3;
 
+    /// Wipes the board.
+    pub fn clear(&mut self) {
+        self.lines.clear();
+    }
+
     pub fn say(&mut self, line: impl Into<String>) {
         self.lines.push_front(line.into());
         self.lines.truncate(Self::CAPACITY);
@@ -170,6 +175,8 @@ pub struct StationLabel(pub CityId);
 /// control never means adding a system.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiAction {
+    /// Swap the interface between English and Arabic.
+    ToggleLanguage,
     /// Pay to lay a surveyed line, bringing it into service this year.
     OpenLine(yafa_core::SegmentId),
     /// Write this station onto the ticket.
@@ -325,6 +332,18 @@ pub struct StationFace {
 /// The year, shown in the header beside the passport count.
 #[derive(Component)]
 pub struct HeaderYear;
+
+/// The language the interface currently on screen was built in.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BuiltLanguage(pub crate::strings::Language);
+
+/// The root of the whole interface, torn down when the language changes.
+#[derive(Component)]
+pub struct InterfaceRoot;
+
+/// The label on the language toggle.
+#[derive(Component)]
+pub struct LanguageToggleLabel;
 
 /// The season, shown under the year.
 #[derive(Component)]

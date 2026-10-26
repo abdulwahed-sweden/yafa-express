@@ -51,6 +51,8 @@ fn headless_with_ui(name: &str) -> App {
                 ui::flash_new_stamps,
                 ui::run_stamp_flash,
                 ui::run_arrival_card,
+                ui::apply_language_toggle,
+                ui::rebuild_on_language_change,
             )
                 .chain()
                 .in_set(GameSet::Present),
@@ -292,4 +294,41 @@ fn the_light_moves_with_the_year() {
 
     assert_eq!(Season::name(0.0), "winter");
     assert_eq!(Season::name(0.5), "summer");
+}
+
+#[test]
+fn the_toggle_rebuilds_the_interface_in_the_other_language() {
+    use yafa_game::strings::{Language, Phrase};
+
+    let mut app = headless_with_ui("the_toggle_rebuilds_the_interface_in_the_other_language");
+    tick(&mut app, 1.0 / 60.0);
+    assert_eq!(*app.world().resource::<Language>(), Language::English);
+
+    let says = |app: &mut App, want: &str| -> bool {
+        let mut query = app.world_mut().query::<&Text>();
+        query.iter(app.world()).any(|text| text.0.contains(want))
+    };
+    assert!(says(&mut app, Language::English.say(Phrase::Depart)));
+
+    app.world_mut().write_message(ActionRequested(UiAction::ToggleLanguage));
+    tick(&mut app, 1.0 / 60.0);
+    tick(&mut app, 1.0 / 60.0);
+    assert_eq!(*app.world().resource::<Language>(), Language::Arabic);
+
+    assert!(
+        says(&mut app, Language::Arabic.say(Phrase::Depart)),
+        "the rebuilt interface should speak Arabic"
+    );
+    assert!(
+        !says(&mut app, Language::English.say(Phrase::SelectDeparture)),
+        "and should not have left an English string standing"
+    );
+
+    // The whole column order turns round with the script.
+    let mut roots = app.world_mut().query_filtered::<&Node, With<InterfaceRoot>>();
+    let root = roots.single(app.world()).expect("one interface root");
+    // `Rtl` alone reverses the main axis, the way CSS does; pairing it with
+    // `RowReverse` would reverse the reversal and change nothing.
+    assert_eq!(root.flex_direction, FlexDirection::Row);
+    assert_eq!(root.direction, InlineDirection::Rtl);
 }
