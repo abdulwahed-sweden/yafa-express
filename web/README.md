@@ -30,5 +30,9 @@ serve it with compression, which together roughly halve it again.
 
 The passport is not written to disk. There is no filesystem to write it to, so
 on the web the year, the money and the stamps last as long as the tab does.
-Everything else - the whole map, the economy, both languages - is the same
-build of the same code.
+
+Sound waits for a gesture. Browsers will not let a page make a noise before the
+visitor has acted on it, which the gate step satisfies either way: the gate is
+reached by pressing DEPART or Space, and answered by tapping a gate. Everything
+else - the whole map, the economy, both
+languages - is the same build of the same code.

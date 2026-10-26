@@ -1,0 +1,292 @@
+<title>يافا إكسبرس — ديمو SL</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@500;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: navy header → in-car progress screen (SL style) → ticket row → schematic map (SL style). Map & screen are LTR diagrams in scroll containers. */
+:root{
+  --bg:#f7f5ef; --card:#ffffff; --fg:#141d29; --muted:#4b5563; --line:#e3ded2;
+  --head:#16243a; --head-fg:#f7f5ef;
+  --screen:#2b2f36; --screen-line:#ffffff; --screen-muted:#9aa4b3;
+  --coast:#1c8a84; --mountain:#b8651f; --link:#8b94a3;
+  --ok:#1f8a4c; --ok-soft:#dff3e6; --unvisited:#c7ccd4;
+  --display:'Readex Pro',system-ui,sans-serif; --body:'IBM Plex Sans Arabic',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#1b2230; --card:#242d3d; --fg:#eef0f3; --muted:#b4bcc9; --line:#3a4557; --head:#111a2a; --coast:#4fc2bb; --mountain:#e0914a; --ok:#5ccf8b; --ok-soft:#1d3a2a; --unvisited:#4a5568; color-scheme:dark } }
+:root[data-theme="dark"]{ --bg:#1b2230; --card:#242d3d; --fg:#eef0f3; --muted:#b4bcc9; --line:#3a4557; --head:#111a2a; --coast:#4fc2bb; --mountain:#e0914a; --ok:#5ccf8b; --ok-soft:#1d3a2a; --unvisited:#4a5568; color-scheme:dark }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;line-height:1.7;direction:rtl}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--head)}
+.wrap{max-width:1040px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{background:var(--head);color:var(--head-fg)}
+header .wrap{padding-block:18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+h1{font-family:var(--display);font-weight:700;font-size:1.6rem;margin:0;line-height:1.3}
+.sub{font-size:15px;opacity:.8;margin:0}
+.stamps{font-family:var(--display);font-weight:500;font-size:1.1rem;background:rgba(255,255,255,.12);padding:6px 16px;border-radius:999px;font-variant-numeric:tabular-nums}
+main .wrap{padding-block:20px 48px;display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;min-width:0}
+h2{font-family:var(--display);font-weight:500;font-size:1.1rem;margin:0 0 8px;color:var(--muted)}
+.scroll{overflow-x:auto;direction:ltr;-webkit-overflow-scrolling:touch}
+.screen{background:var(--screen);border-radius:12px;padding:10px 8px;color:#fff}
+.screen svg{display:block;min-width:720px;width:100%;height:auto}
+.ticket{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.slot{flex:1 1 180px;min-width:0;border:1px solid var(--line);border-radius:10px;padding:8px 14px;background:var(--bg)}
+.slot small{display:block;font-size:14px;color:var(--muted)}
+.slot b{font-family:var(--display);font-weight:500;font-size:1.15rem}
+.slot .en{font-family:var(--mono);font-size:13px;color:var(--muted);direction:ltr;display:inline-block;margin-inline-start:8px}
+button{font-family:var(--display);font-weight:500;font-size:1.05rem;border:0;border-radius:10px;padding:12px 26px;background:var(--coast);color:#fff;cursor:pointer}
+button:disabled{background:var(--unvisited);cursor:default}
+button:focus-visible{outline:3px solid var(--mountain);outline-offset:2px}
+.hint{font-size:15px;color:var(--muted);margin:8px 0 0}
+.map svg{display:block;min-width:1000px;width:100%;height:auto}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:15px;color:var(--muted);margin-top:10px}
+.legend span::before{content:"";display:inline-block;width:22px;height:6px;border-radius:3px;vertical-align:middle;margin-inline-end:6px;background:var(--c)}
+/* departure board: navy band, yellow stripe, amber dot-matrix */
+.board{background:#1d2a6b;border-bottom:8px solid #f2c200;border-radius:10px 10px 4px 4px;padding:12px 14px;direction:ltr;display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center}
+.board .side{display:grid;gap:6px;min-width:0}
+.led{display:flex;align-items:center;gap:10px;background:#0b0f1c;border-radius:6px;padding:6px 12px;font-family:var(--mono);font-weight:500;font-size:clamp(14px,3.4vw,22px);color:#ffb000;text-shadow:0 0 6px rgba(255,176,0,.55);white-space:nowrap;overflow:hidden;font-variant-numeric:tabular-nums}
+.led .n{color:#fff;background:var(--c);border-radius:4px;padding:0 7px;font-size:.8em}
+.led .dest{flex:1;text-align:left;font-family:var(--body);font-weight:600}
+.led.dim{color:#c98c00;opacity:.85;font-size:clamp(13px,3vw,18px)}
+.dot{width:12px;height:12px;border-radius:50%;background:#ff3b30;box-shadow:0 0 8px #ff3b30;flex:none}
+.clock{width:84px;height:84px;background:#fff;border-radius:50%;position:relative;flex:none}
+.clock i{position:absolute;left:50%;bottom:50%;transform-origin:bottom center;background:#111;border-radius:2px}
+.clock .h{width:5px;height:24px;margin-left:-2.5px}.clock .m{width:3px;height:34px;margin-left:-1.5px}.clock .s{width:2px;height:36px;margin-left:-1px;background:#d22}
+@media (max-width:560px){.board{grid-template-columns:1fr;}.clock{display:none}}
+/* ticket gates */
+.gates{display:flex;gap:10px;justify-content:center;direction:ltr;padding:10px 0 0}
+.gate{width:88px;flex:none;cursor:pointer;border:0;background:none;padding:0;font-family:var(--body)}
+.gate .glass{height:54px;border:2px solid #c8ccd2;border-bottom:0;border-radius:8px 8px 0 0;background:linear-gradient(#eef3f7,#d9e0e8);position:relative;overflow:hidden}
+.gate .bar{position:absolute;inset:8px 0 auto;height:18px;background:var(--gc);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;line-height:1}
+.gate .body{height:70px;background:linear-gradient(90deg,#b9bec6,#dfe3e8 40%,#aeb4bc);border-radius:0 0 6px 6px;position:relative}
+.gate .pad{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:28px;height:28px;border-radius:50%;background:#1a1d22;color:var(--gc);display:grid;place-items:center;font-size:15px;font-weight:700}
+.gate .strip{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:5px;height:24px;border-radius:3px;background:var(--gc);box-shadow:0 0 8px var(--gc)}
+.gate.open{--gc:#22c55e}.gate.closed{--gc:#ef4444}
+.gate.flash .glass{animation:flash .5s 2}
+@keyframes flash{50%{background:var(--gc)}}
+.gate:focus-visible{outline:3px solid var(--mountain);border-radius:8px}
+.toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ok);color:#fff;font-family:var(--display);padding:10px 22px;border-radius:999px;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+
+<header><div class="wrap">
+  <div><h1>يافا إكسبرس</h1><p class="sub">ديمو مفهوم SL: شاشة التقدّم داخل العربة + الخريطة التخطيطية</p></div>
+  <div class="stamps">الأختام <span id="stampN">0</span> / 21</div>
+</div></header>
+
+<main><div class="wrap">
+
+<section class="card">
+  <h2>لوحة المغادرة — عند المحطة</h2>
+  <div class="board">
+    <div class="side">
+      <div class="led"><span class="dot"></span><span class="n" style="--c:var(--coast)">1</span><span class="dest">عكا</span><span id="d1a">6 min</span></div>
+      <div class="led dim"><span style="width:12px"></span><span class="n" style="--c:var(--coast)">1</span><span class="dest">عكا</span><span id="d1b">25 min</span></div>
+    </div>
+    <div class="clock" id="clock"><i class="h"></i><i class="m"></i><i class="s"></i></div>
+    <div class="side">
+      <div class="led"><span class="dot"></span><span class="n" style="--c:var(--mountain)">2</span><span class="dest">صفد</span><span id="d2a">7 min</span></div>
+      <div class="led dim"><span style="width:12px"></span><span class="n" style="--c:var(--mountain)">2</span><span class="dest">صفد</span><span id="d2b">27 min</span></div>
+    </div>
+  </div>
+  <h2 style="margin-top:16px">البوابات — مرّر تذكرتك</h2>
+  <div class="gates" id="gates"></div>
+  <p class="hint" id="gateHint">بوابة خضراء = تذكرة صالحة وتفتح الطريق. بوابة حمراء = مغلقة.</p>
+</section>
+
+<section class="card">
+  <h2>الآن — شاشة داخل العربة</h2>
+  <div class="scroll"><div class="screen"><svg id="screen" viewBox="0 0 900 170" xmlns="http://www.w3.org/2000/svg"></svg></div></div>
+</section>
+
+<section class="card">
+  <h2>التذكرة</h2>
+  <div class="ticket">
+    <div class="slot"><small>من</small><b id="fromAr">—</b><span class="en" id="fromEn"></span></div>
+    <div class="slot"><small>إلى</small><b id="toAr">—</b><span class="en" id="toEn"></span></div>
+    <button id="go" disabled>انطلق</button>
+  </div>
+  <p class="hint" id="hint">اضغط على محطة في الخريطة لاختيار نقطة الانطلاق، ثم محطة أخرى للوجهة.</p>
+</section>
+
+<section class="card map">
+  <h2>الخريطة التخطيطية</h2>
+  <div class="scroll"><svg id="map" viewBox="0 0 1000 400" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <div class="legend">
+    <span style="--c:var(--coast)">1 خط الساحل</span>
+    <span style="--c:var(--mountain)">2 خط الجبل</span>
+    <span style="--c:var(--link)">وصلات</span>
+    <span style="--c:var(--ok)">زُرت</span>
+  </div>
+</section>
+
+</div></main>
+<div class="toast" id="toast"></div>
+
+<script>
+// ---- data: cities (x,y schematic), lines, edges ----
+const C = [
+ ['rafah','رفح','Rafah',70,110,'coast'],['khan','خان يونس','Khan Yunis',150,110,'coast'],
+ ['ghazzah','غزة','Ghazzah',230,110,'coast'],['majdal','المجدل','Al-Majdal',310,110,'coast'],
+ ['isdud','إسدود','Isdud',390,110,'coast'],['yibna','يبنا','Yibna',470,110,'coast'],
+ ['yafa','يافا','Yafa',560,110,'coast'],['qays','قيسارية','Qaysariya',680,110,'coast'],
+ ['haifa','حيفا','Haifa',800,110,'coast'],['akka','عكا','Akka',920,110,'coast'],
+ ['birsabi','بئر السبع',"Bir al-Sabi'",230,310,'mountain'],['khalil','الخليل','Al-Khalil',320,310,'mountain'],
+ ['lahm','بيت لحم','Bayt Lahm',410,310,'mountain'],['quds','القدس','Al-Quds',500,310,'mountain'],
+ ['ramallah','رام الله','Ramallah',580,310,'mountain'],['nablus','نابلس','Nablus',660,310,'mountain'],
+ ['jenin','جنين','Jenin',740,310,'mountain'],['nasira','الناصرة','Al-Nasira',820,310,'mountain'],
+ ['tabariyya','طبريا','Tabariyya',880,310,'mountain'],['safad','صفد','Safad',940,310,'mountain'],
+ ['lidd','اللد','Al-Lidd',560,200,'link'],
+].map(([id,ar,en,x,y,line])=>({id,ar,en,x,y,line}));
+const byId = Object.fromEntries(C.map(c=>[c.id,c]));
+const coast = C.filter(c=>c.line==='coast').map(c=>c.id);
+const mountain = C.filter(c=>c.line==='mountain').map(c=>c.id);
+const E = [];
+for(let i=0;i<coast.length-1;i++) E.push([coast[i],coast[i+1],'coast']);
+for(let i=0;i<mountain.length-1;i++) E.push([mountain[i],mountain[i+1],'mountain']);
+E.push(['ghazzah','birsabi','link'],['yafa','lidd','link'],['lidd','quds','link']);
+const adj={}; C.forEach(c=>adj[c.id]=[]);
+E.forEach(([a,b,l])=>{adj[a].push({to:b,l});adj[b].push({to:a,l});});
+const interchange = new Set(['ghazzah','yafa','quds','lidd']);
+const col = {coast:'var(--coast)',mountain:'var(--mountain)',link:'var(--link)'};
+
+function route(a,b){ // BFS
+  const prev={[a]:null}, q=[a];
+  while(q.length){const u=q.shift(); if(u===b)break; for(const {to} of adj[u]) if(!(to in prev)){prev[to]=u;q.push(to);} }
+  if(!(b in prev)) return null; const p=[]; for(let v=b;v;v=prev[v]) p.unshift(v); return p;
+}
+function edgeLine(a,b){ return adj[a].find(e=>e.to===b).l; }
+
+// ---- state ----
+let from=null, to=null, path=null, visited=new Set(), running=false;
+const SVG='http://www.w3.org/2000/svg';
+const el=(t,a={},txt)=>{const n=document.createElementNS(SVG,t);for(const k in a)n.setAttribute(k,a[k]);if(txt!=null)n.textContent=txt;return n;};
+
+// ---- schematic map ----
+const map=document.getElementById('map');
+function drawMap(){
+  map.replaceChildren();
+  map.appendChild(el('rect',{x:0,y:0,width:1000,height:400,rx:12,fill:'#2b2f36'}));
+  map.appendChild(el('text',{x:24,y:34,fill:'#fff','font-family':'var(--display)','font-size':'18','font-weight':'700'},'Yafa Express'));
+  map.appendChild(el('text',{x:24,y:56,fill:'#9aa4b3','font-family':'var(--body)','font-size':'14'},'خريطة الشبكة'));
+  // lidd path: yafa ↓ lidd ↓ then 45° to quds
+  map.appendChild(el('path',{d:'M560 110 L560 250 L500 310',stroke:col.link,'stroke-width':'7',fill:'none','stroke-linejoin':'round'}));
+  map.appendChild(el('line',{x1:230,y1:110,x2:230,y2:310,stroke:col.link,'stroke-width':'7'}));
+  map.appendChild(el('line',{x1:70,y1:110,x2:920,y2:110,stroke:col.coast,'stroke-width':'9','stroke-linecap':'round'}));
+  map.appendChild(el('line',{x1:230,y1:310,x2:940,y2:310,stroke:col.mountain,'stroke-width':'9','stroke-linecap':'round'}));
+  // selected route highlight
+  if(path){ for(let i=0;i<path.length-1;i++){const a=byId[path[i]],b=byId[path[i+1]];
+    let d; if((a.id==='lidd'&&b.id==='quds')) d='M560 200 L560 250 L500 310'; else if(a.id==='quds'&&b.id==='lidd') d='M500 310 L560 250 L560 200'; else d=`M${a.x} ${a.y} L${b.x} ${b.y}`;
+    map.appendChild(el('path',{d,stroke:'#fff','stroke-width':'13',fill:'none','stroke-linecap':'round','stroke-linejoin':'round',opacity:'.9'}));}}
+  // line badges at terminals
+  const badge=(x,y,n,c,anchor)=>{map.appendChild(el('rect',{x:x-11,y:y-11,width:22,height:22,rx:5,fill:c}));map.appendChild(el('text',{x,y:y+5,fill:'#fff','text-anchor':'middle','font-family':'var(--mono)','font-size':'13','font-weight':'500'},n));};
+  badge(40,110,'1',col.coast); badge(955,110,'1',col.coast); badge(200,310,'2',col.mountain); badge(975,310,'2',col.mountain);
+  // stations
+  C.forEach(c=>{
+    const g=el('g',{style:'cursor:pointer',tabindex:'0',role:'button'}); g.dataset.id=c.id;
+    const sel=(c.id===from||c.id===to), vis=visited.has(c.id);
+    if(interchange.has(c.id)){ g.appendChild(el('rect',{x:c.x-9,y:c.y-13,width:18,height:26,rx:9,fill:sel?'#ffd166':(vis?'var(--ok)':'#fff'),stroke:'#2b2f36','stroke-width':'3'})); }
+    else { g.appendChild(el('circle',{cx:c.x,cy:c.y,r:sel?9:7,fill:sel?'#ffd166':(vis?'var(--ok)':'#fff'),stroke:'#2b2f36','stroke-width':'2'})); }
+    g.appendChild(el('circle',{cx:c.x,cy:c.y,r:18,fill:'transparent'})); // 36px hit target
+    const up = c.line==='coast' || c.id==='lidd';
+    const ty = up ? c.y-22 : c.y+22;
+    const t=el('text',{x:c.x,y:ty,fill:sel?'#ffd166':'#fff','font-family':'var(--body)','font-size':'15','font-weight':sel?'600':'500','text-anchor':up?'start':'end',transform:`rotate(-40 ${c.x} ${ty})`},c.ar);
+    if(c.id==='lidd'){t.setAttribute('transform','');t.setAttribute('x',c.x+16);t.setAttribute('y',c.y+5);t.setAttribute('text-anchor','start');}
+    g.appendChild(t);
+    const e=el('text',{x:c.x,y:ty+(up?14:-14),fill:'#9aa4b3','font-family':'var(--mono)','font-size':'10','text-anchor':up?'start':'end',transform:`rotate(-40 ${c.x} ${ty+(up?14:-14)})`},c.en);
+    if(c.id==='lidd'){e.setAttribute('transform','');e.setAttribute('x',c.x+16);e.setAttribute('y',c.y+20);e.setAttribute('text-anchor','start');}
+    g.appendChild(e);
+    g.addEventListener('click',()=>pick(c.id)); g.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();pick(c.id);}});
+    map.appendChild(g);
+  });
+}
+
+// ---- in-car screen ----
+const scr=document.getElementById('screen');
+let prog=0; // 0..path.length-1
+function drawScreen(){
+  scr.replaceChildren();
+  if(!path){ scr.appendChild(el('text',{x:450,y:90,fill:'#9aa4b3','text-anchor':'middle','font-family':'var(--body)','font-size':'18'},'اختر محطتين من الخريطة')); return; }
+  const n=path.length, x0=50, gap=Math.min(90,(620)/(n-1)), y=118;
+  const xs=path.map((_,i)=>x0+i*gap);
+  const dest=byId[path[n-1]];
+  const cur=Math.floor(prog), next=Math.min(cur+1,n-1), tx=xs[cur]+(xs[next]-xs[cur])*(prog-cur);
+  // remaining (white) then passed (coloured)
+  scr.appendChild(el('line',{x1:xs[0],y1:y,x2:xs[n-1],y2:y,stroke:'#fff','stroke-width':'8','stroke-linecap':'round'}));
+  scr.appendChild(el('line',{x1:xs[0],y1:y,x2:tx,y2:y,stroke:col.coast,'stroke-width':'8','stroke-linecap':'round'}));
+  path.forEach((id,i)=>{const c=byId[id], passed=i<=prog, isNext=(i===next&&prog<n-1&&!Number.isInteger(prog)||i===cur&&Number.isInteger(prog));
+    scr.appendChild(el('circle',{cx:xs[i],cy:y,r:isNext?8:6,fill:passed?col.coast:'#fff',stroke:'#2b2f36','stroke-width':'2'}));
+    scr.appendChild(el('text',{x:xs[i]+4,y:y-16,fill:passed&&!isNext?'#9aa4b3':'#fff','font-family':'var(--body)','font-size':isNext?'17':'14','font-weight':isNext?'600':'400',transform:`rotate(-40 ${xs[i]+4} ${y-16})`},c.ar));
+  });
+  // destination box
+  scr.appendChild(el('line',{x1:xs[n-1],y1:y,x2:xs[n-1]+40,y2:y,stroke:'#fff','stroke-width':'8'}));
+  scr.appendChild(el('rect',{x:xs[n-1]+40,y:y-46,width:150,height:92,rx:6,fill:'#fff'}));
+  scr.appendChild(el('text',{x:xs[n-1]+115,y:y-4,fill:'#141d29','text-anchor':'middle','font-family':'var(--display)','font-size':'20','font-weight':'700'},dest.ar));
+  scr.appendChild(el('text',{x:xs[n-1]+115,y:y+22,fill:'#4b5563','text-anchor':'middle','font-family':'var(--mono)','font-size':'12'},dest.en));
+  // train marker
+  scr.appendChild(el('rect',{x:tx-14,y:y-7,width:28,height:14,rx:3,fill:'#ffd166',stroke:'#2b2f36','stroke-width':'2'}));
+  // status
+  const status = prog>=n-1 ? `وصلنا: ${dest.ar}` : (Number.isInteger(prog)?`في المحطة: ${byId[path[cur]].ar}`:`المحطة القادمة: ${byId[path[next]].ar}`);
+  scr.appendChild(el('text',{x:850,y:30,fill:'#fff','text-anchor':'end','font-family':'var(--body)','font-size':'16','font-weight':'500'},status));
+}
+
+// ---- sounds (WebAudio, only after click) ----
+let actx=null; const audio=()=>actx||(actx=new (window.AudioContext||window.webkitAudioContext)());
+function tone(f,dur,type='sine',g=.15){try{const a=audio(),o=a.createOscillator(),v=a.createGain();o.type=type;o.frequency.value=f;v.gain.value=g;v.gain.exponentialRampToValueAtTime(.001,a.currentTime+dur);o.connect(v).connect(a.destination);o.start();o.stop(a.currentTime+dur);}catch(e){}}
+const sfx={ whistle:()=>{tone(620,.6,'triangle',.12);setTimeout(()=>tone(820,.5,'triangle',.1),120);}, bell:()=>{tone(1320,.5,'sine',.12);setTimeout(()=>tone(1760,.6,'sine',.1),220);}, stamp:()=>tone(140,.12,'square',.2), select:()=>tone(900,.06,'sine',.08) };
+
+// ---- interaction ----
+function pick(id){
+  if(running) return; sfx.select();
+  if(!from||(from&&to)){from=id;to=null;path=null;prog=0;}
+  else if(id===from){from=null;}
+  else {to=id;path=route(from,to);prog=0;}
+  const f=byId[from], t=byId[to];
+  document.getElementById('fromAr').textContent=f?f.ar:'—'; document.getElementById('fromEn').textContent=f?f.en:'';
+  document.getElementById('toAr').textContent=t?t.ar:'—'; document.getElementById('toEn').textContent=t?t.en:'';
+  document.getElementById('go').disabled=!path;
+  document.getElementById('hint').textContent = path ? `الرحلة: ${path.length-1} ${path.length-1===1?'مرحلة':'مراحل'} عبر ${path.map(i=>byId[i].ar).join(' ← ')}` : (from?'الآن اختر الوجهة.':'اضغط على محطة في الخريطة لاختيار نقطة الانطلاق، ثم محطة أخرى للوجهة.');
+  drawMap(); drawScreen();
+}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1400);}
+function stamp(id){ if(!visited.has(id)){visited.add(id);document.getElementById('stampN').textContent=visited.size;sfx.stamp();toast(`ختم جديد: ${byId[id].ar}`);} }
+
+// ---- departure board: clock + countdown (1 "min" = 5 s) ----
+const dep={d1a:6,d1b:25,d2a:7,d2b:27};
+function tickBoard(){for(const k in dep){dep[k]=dep[k]<=0?(k.endsWith('a')?dep[k.slice(0,2)+'b']:dep[k]+19):dep[k]-1;if(dep[k]<0)dep[k]=0;document.getElementById(k).textContent=dep[k]===0?'nu':`${dep[k]} min`;}}
+setInterval(tickBoard,5000);
+function tickClock(){const d=new Date(),c=document.getElementById('clock');c.querySelector('.h').style.transform=`rotate(${(d.getHours()%12)*30+d.getMinutes()*.5}deg)`;c.querySelector('.m').style.transform=`rotate(${d.getMinutes()*6}deg)`;c.querySelector('.s').style.transform=`rotate(${d.getSeconds()*6}deg)`;}
+tickClock(); setInterval(tickClock,1000);
+
+// ---- gates: valid ticket → green & depart; otherwise red ----
+const gatesEl=document.getElementById('gates');
+[['open','↑'],['open','↑'],['closed','✕'],['closed','✕']].forEach(([st,sym],i)=>{
+  const b=document.createElement('button'); b.className='gate '+st; b.setAttribute('aria-label',st==='open'?'بوابة دخول':'بوابة مغلقة');
+  b.innerHTML=`<div class="glass"><div class="bar">${sym}</div></div><div class="body"><div class="pad">${sym}</div><div class="strip"></div></div>`;
+  b.addEventListener('click',()=>tapGate(b,st)); gatesEl.appendChild(b);
+});
+function tapGate(b,st){
+  if(running) return;
+  b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash');
+  if(st==='closed'){ tone(220,.25,'square',.12); document.getElementById('gateHint').textContent='هذه البوابة مغلقة (✕). استخدم بوابة خضراء.'; return; }
+  if(!path){ tone(220,.25,'square',.12); document.getElementById('gateHint').textContent='لا تذكرة بعد: اختر محطتين من الخريطة أولًا.'; return; }
+  tone(1200,.12,'sine',.12); document.getElementById('gateHint').textContent=`تذكرة صالحة: ${byId[path[0]].ar} ← ${byId[path[path.length-1]].ar}. البوابة فتحت، القطار ينطلق.`;
+  setTimeout(depart,500);
+}
+
+document.getElementById('go').addEventListener('click',depart);
+function depart(){
+  if(!path||running) return; running=true; document.getElementById('go').disabled=true; sfx.whistle(); stamp(path[0]);
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let seg=0; const n=path.length;
+  const step=()=>{ // move one segment in ~1.6s, dwell .9s
+    const t0=performance.now(), d=reduce?10:1600;
+    const f=(now)=>{const k=Math.min(1,(now-t0)/d); prog=seg+k; drawScreen();
+      if(k<1) requestAnimationFrame(f); else { seg++; sfx.bell(); stamp(path[seg]); drawMap();
+        if(seg<n-1) setTimeout(step,reduce?10:900); else { running=false; document.getElementById('hint').textContent=`وصل القطار إلى ${byId[path[n-1]].ar}. اختر محطتين لرحلة جديدة.`; from=path[n-1]; to=null; } } };
+    requestAnimationFrame(f);
+  };
+  step();
+}
+drawMap(); drawScreen();
+</script>

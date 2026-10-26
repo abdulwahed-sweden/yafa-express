@@ -18,9 +18,9 @@ use yafa_game::{GameSet, SimulationPlugin, map, ui};
 
 /// The game with its interface built, but nothing rendering it.
 ///
-/// `map::spawn_water` and the gizmo systems are left out: they are the parts
-/// of the presentation layer that need the renderer's own resources. The
-/// locomotive is built there too, so the harness spawns a bare one itself.
+/// The gizmo systems and the mesh-building ones are left out: they are the
+/// parts of the presentation layer that need the renderer's own resources.
+/// The locomotive is one of them, so the harness spawns a bare one itself.
 fn headless_with_ui(name: &str) -> App {
     let mut app = App::new();
     app.add_plugins((InputPlugin, StatesPlugin))
@@ -38,11 +38,15 @@ fn headless_with_ui(name: &str) -> App {
             require_markers: false,
             picking_mode: SpritePickingMode::BoundingBox,
         })
-        .add_systems(Startup, (map::spawn_map, ui::build_ui))
+        .insert_resource(map::make_schematic_view())
+        .add_systems(Startup, (map::spawn_map, map::spawn_schematic_stations, ui::build_ui))
         .add_systems(
             Update,
             (
                 ui::style_controls,
+                ui::tick_departure_board,
+                ui::refresh_departure_board,
+                ui::refresh_gates,
                 ui::refresh_ticket,
                 ui::refresh_board,
                 ui::refresh_city_panel,
@@ -88,6 +92,8 @@ fn the_whole_layout_spawns_and_refreshes() {
 
 #[test]
 fn there_is_one_marker_and_one_stamp_card_per_station() {
+    // The station list panel is gone - the schematic map is the list now -
+    // so the map's own marks are what has to be there, one per city.
     let mut app = headless_with_ui("there_is_one_marker_and_one_stamp_card_per_station");
 
     let mut dots = app.world_mut().query::<&StationDot>();
@@ -95,9 +101,6 @@ fn there_is_one_marker_and_one_stamp_card_per_station() {
 
     let mut labels = app.world_mut().query::<&StationLabel>();
     assert_eq!(labels.iter(app.world()).count(), CITY_COUNT);
-
-    let mut rows = app.world_mut().query::<&StationRow>();
-    assert_eq!(rows.iter(app.world()).count(), CITY_COUNT);
 
     let mut cards = app.world_mut().query::<&StampCard>();
     assert_eq!(cards.iter(app.world()).count(), CITY_COUNT);
@@ -349,4 +352,157 @@ fn the_camera_is_marked_for_ui_picking() {
         !strict || marked > 0,
         "picking is set to require markers, so some camera must carry UiPickingCamera"
     );
+}
+
+#[test]
+fn the_departure_board_wakes_up_once_a_station_is_written_on_the_ticket() {
+    let mut app =
+        headless_with_ui("the_departure_board_wakes_up_once_a_station_is_written_on_the_ticket");
+    tick(&mut app, 1.0 / 60.0);
+
+    let mut panels = app.world_mut().query_filtered::<&Node, With<DepartureBoardPanel>>();
+    assert_eq!(
+        panels.single(app.world()).expect("one board").display,
+        Display::None,
+        "a blank ticket has no platform to stand on"
+    );
+
+    app.world_mut().write_message(ActionRequested(UiAction::PickCity(CityId::Yafa)));
+    tick(&mut app, 1.0 / 60.0);
+
+    let mut panels = app.world_mut().query_filtered::<&Node, With<DepartureBoardPanel>>();
+    assert_eq!(
+        panels.single(app.world()).expect("one board").display,
+        Display::Flex,
+        "the board lights up with the departure station"
+    );
+
+    let mut rows = app.world_mut().query::<(&DepartureDest, &Text)>();
+    let mut named: Vec<(usize, String)> = rows
+        .iter(app.world())
+        .map(|(DepartureDest(row), text)| (*row, text.0.clone()))
+        .filter(|(_, name)| !name.is_empty())
+        .collect();
+    named.sort();
+    // In 1892 one line is open out of Yafa, so one direction is lit, twice.
+    assert_eq!(named.len(), 2, "one direction, its two next departures: {named:?}");
+    assert!(
+        named.iter().all(|(_, name)| name.contains("Al-Ladd")),
+        "both read the open way out: {named:?}"
+    );
+
+    let mut times = app.world_mut().query::<(&DepartureTime, &Text)>();
+    let shown: Vec<String> = times.iter(app.world()).map(|(_, text)| text.0.clone()).collect();
+    assert!(
+        shown.iter().filter(|line| line.contains("6")).count() >= 1,
+        "the first departure is six minutes out: {shown:?}"
+    );
+}
+
+#[test]
+fn the_board_counts_down_at_the_timetable_speed() {
+    let mut app = headless_with_ui("the_board_counts_down_at_the_timetable_speed");
+    app.world_mut().write_message(ActionRequested(UiAction::PickCity(CityId::Yafa)));
+    tick(&mut app, 1.0 / 60.0);
+
+    let before = app.world().resource::<DepartureBoard>().minutes[0];
+    // One game minute at the opening timetable speed.
+    let a_minute = DepartureBoard::rate(app.world().resource::<Clock>().time_scale);
+    tick(&mut app, a_minute);
+    let after = app.world().resource::<DepartureBoard>().minutes[0];
+
+    assert!((before - after - 1.0).abs() < 0.05, "one minute off the board: {before} -> {after}");
+}
+
+#[test]
+fn the_gates_only_open_for_a_ticket_that_is_written() {
+    let mut app = headless_with_ui("the_gates_only_open_for_a_ticket_that_is_written");
+    tick(&mut app, 1.0 / 60.0);
+
+    let shown = |app: &mut App| {
+        let mut query = app.world_mut().query_filtered::<&Node, With<GatePanel>>();
+        query.single(app.world()).expect("one gate panel").display
+    };
+    assert_eq!(shown(&mut app), Display::None, "the gates are past the counter");
+
+    // A blank ticket still gets torn, and both gates stay shut.
+    app.world_mut().write_message(ActionRequested(UiAction::ApproachGates));
+    tick(&mut app, 1.0 / 60.0);
+    assert_eq!(shown(&mut app), Display::Flex, "but the player is at them now");
+    let gates = app.world().resource::<Gates>();
+    assert!(!gates.valid, "nothing is written on it");
+    assert!(!gates.is_open(GateLane::Signalled), "so no signal is green");
+
+    app.world_mut().write_message(ActionRequested(UiAction::TapGate(GateLane::Signalled)));
+    tick(&mut app, 1.0 / 60.0);
+    assert_eq!(
+        app.world().resource::<Gates>().note,
+        yafa_game::strings::Phrase::GateNeedsTwo,
+        "and it says what is missing"
+    );
+    assert_eq!(
+        app.world().resource::<State<GamePhase>>().get(),
+        &GamePhase::AtTheCounter,
+        "no train left on a blank ticket"
+    );
+
+    // Write the ticket and the signal turns.
+    app.world_mut().write_message(ActionRequested(UiAction::PickCity(CityId::Yafa)));
+    app.world_mut().write_message(ActionRequested(UiAction::PickCity(CityId::AlLadd)));
+    tick(&mut app, 1.0 / 60.0);
+    app.world_mut().write_message(ActionRequested(UiAction::ApproachGates));
+    tick(&mut app, 1.0 / 60.0);
+    assert!(app.world().resource::<Gates>().is_open(GateLane::Signalled));
+
+    // The barred gate still refuses it, and says which gate to use.
+    app.world_mut().write_message(ActionRequested(UiAction::TapGate(GateLane::Shut)));
+    tick(&mut app, 1.0 / 60.0);
+    assert_eq!(app.world().resource::<Gates>().note, yafa_game::strings::Phrase::GateShut);
+    assert!(app.world().resource::<Gates>().showing, "the player is still outside");
+
+    // The open one takes it.
+    app.world_mut().write_message(ActionRequested(UiAction::TapGate(GateLane::Signalled)));
+    tick(&mut app, 1.0 / 60.0);
+    tick(&mut app, 1.0 / 60.0);
+    assert!(!app.world().resource::<Gates>().showing, "through the gate and gone");
+    assert_eq!(shown(&mut app), Display::None);
+}
+
+#[test]
+fn a_flash_fades_on_its_own() {
+    let mut app = headless_with_ui("a_flash_fades_on_its_own");
+    app.world_mut().write_message(ActionRequested(UiAction::ApproachGates));
+    app.world_mut().write_message(ActionRequested(UiAction::TapGate(GateLane::Shut)));
+    tick(&mut app, 1.0 / 60.0);
+    tick(&mut app, 1.0 / 60.0);
+    assert_eq!(
+        app.world().resource::<Gates>().flashing(),
+        Some((GateLane::Shut, GateVerdict::Refused)),
+        "the gate holds its colour for a moment"
+    );
+
+    tick(&mut app, Gates::FLASH);
+    assert_eq!(app.world().resource::<Gates>().flashing(), None, "and then lets it go");
+}
+
+#[test]
+fn every_station_on_the_schematic_can_still_be_clicked() {
+    // The station list is gone: the map is the only way to write a ticket,
+    // so a pad that is missing, unpickable or zero-sized makes a station
+    // unreachable.
+    let mut app = headless_with_ui("every_station_on_the_schematic_can_still_be_clicked");
+    tick(&mut app, 1.0 / 60.0);
+
+    let mut pads = app.world_mut().query::<(&StationDot, &Sprite, Has<Pickable>)>();
+    let mut reachable: Vec<CityId> = Vec::new();
+    for (StationDot(city), sprite, pickable) in pads.iter(app.world()) {
+        assert!(pickable, "{city:?} has a pad the pointer cannot hit");
+        let size = sprite.custom_size.expect("a transparent pad needs an explicit size");
+        assert!(size.x > 0.0 && size.y > 0.0, "{city:?} has a pad of no size");
+        reachable.push(*city);
+    }
+
+    reachable.sort_by_key(|city| *city as usize);
+    reachable.dedup();
+    assert_eq!(reachable.len(), CITY_COUNT, "every station has exactly one pad");
 }

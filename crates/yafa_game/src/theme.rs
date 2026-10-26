@@ -84,7 +84,9 @@ pub fn line_color(line: LineType) -> Color {
     match line {
         LineType::Coastal => Color::srgb_u8(0x1C, 0x8A, 0x84),
         LineType::Mountain => Color::srgb_u8(0xB8, 0x65, 0x1F),
-        LineType::Junction => Color::srgb_u8(0x6B, 0x74, 0x82),
+        // The SL concept names this one: #8b94a3, a shade lighter than the
+        // slate used for text, so the links read on the dark diagram.
+        LineType::Junction => Color::srgb_u8(0x8B, 0x94, 0xA3),
     }
 }
 
@@ -95,6 +97,34 @@ pub fn line_color(line: LineType) -> Color {
 pub fn line_color_dim(line: LineType) -> Color {
     line_color(line).mix(&DESK, 0.62)
 }
+
+// --- The departure board --------------------------------------------------
+//
+// The board's own four colours, which appear nowhere else in the game: a navy
+// band under a yellow stripe, amber dot-matrix type on near-black.
+
+pub const BOARD_BAND: Color = Color::srgb_u8(0x1D, 0x2A, 0x6B);
+pub const BOARD_STRIPE: Color = Color::srgb_u8(0xF2, 0xC2, 0x00);
+pub const BOARD_GROUND: Color = Color::srgb_u8(0x0B, 0x0F, 0x1C);
+pub const BOARD_AMBER: Color = Color::srgb_u8(0xFF, 0xB0, 0x00);
+/// The second departure in each direction, held back from the first.
+pub const BOARD_AMBER_DIM: Color = Color::srgb_u8(0xC9, 0x8C, 0x00);
+
+// --- The ticket gates -----------------------------------------------------
+
+/// An open gate's signal, and the flash when a ticket is accepted. The same
+/// green as a visited station: this has happened.
+pub const GATE_OPEN: Color = VISITED;
+
+/// A gate that stays shut, and the flash when a ticket is refused. The only
+/// red in the game, and it only ever means a real error.
+pub const GATE_SHUT: Color = Color::srgb_u8(0xB4, 0x23, 0x18);
+
+/// The lit strip across an open gate.
+pub const GATE_OPEN_GLOW: Color = Color::srgb_u8(0xEA, 0xF6, 0xEE);
+
+/// The same across a shut one.
+pub const GATE_SHUT_GLOW: Color = Color::srgb_u8(0xFD, 0xEC, 0xEB);
 
 // --- The season -----------------------------------------------------------
 

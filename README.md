@@ -16,10 +16,11 @@ cargo run --release
 
 ## The loop
 
-1. **Ticket Counter** - click a departure station and a destination, on the map
-   or in the station list. The route is solved for you across the network.
-2. **Depart** - the train pulls out and works its way along the track, stopping
-   at every station on the route.
+1. **Ticket Counter** - click a departure station and a destination on the
+   schematic map. The route is solved for you across the network.
+2. **The gates** - DEPART tears the ticket; offer it at the green gate and the
+   train pulls out, working its way along the track and stopping at every
+   station on the route.
 3. **Passport** - each station it calls at is stamped. A station is only ever
    stamped once; the trick is to find routes that pass through places you have
    not been.
@@ -30,9 +31,10 @@ cargo run --release
 
 | Input | Effect |
 | --- | --- |
-| Click a station (map or list) | Write it onto the ticket - first `FROM`, then `TO` |
+| Click a station on the map | Write it onto the ticket - first `FROM`, then `TO` |
 | Click a written station again | Rub it out |
-| `Space` | Depart, or dismiss an arrived train |
+| `Space` or `DEPART` | Tear the ticket and walk to the gates |
+| Click a gate | Offer the ticket: the green one lets the train go, the red one does not |
 | `DEPART` once arrived | Books the next trip, so the counter is never a dead end |
 | `Esc` | Tear up the ticket |
 | `Tab` | Cycle the timetable speed (Local / Express / Mail) |
@@ -129,18 +131,22 @@ crates/
     main.rs      the launcher: window and plugins
     lib.rs       plugin wiring and system ordering
     components.rs  components, messages, resources, states
-    map.rs       projection, track drawing, the locomotive
+    map.rs       the schematic diagram, the progress strip, the locomotive
     systems.rs   ticketing, movement, stamping, saving
-    ui.rs        ticket counter, station board, city panel, passport
+    ui.rs        ticket counter, departure board, gates, city panel, passport
     theme.rs     palette, typefaces and shared chrome
+    strings.rs   every phrase, in English and Arabic
+    audio.rs     the sound catalogue and the one system that plays it
     assets/fonts/  Plex Sans, Plex Sans Arabic and Plex Mono, compiled in
+    assets/audio/  the catalogue's folders; the clips are not here yet
     tests/
       journey.rs   whole journeys driven through the real ECS, headless
       layout.rs    the real interface spawned and refreshed, headless
 ```
 
 The application is split into a `SimulationPlugin` - the rules, which need no
-window - and a `PresentationPlugin` - everything that draws. That split is what
+window - a `PresentationPlugin` - everything that draws - and a `SoundPlugin`,
+which is the only one that makes a noise. That split is what
 lets the integration tests drive a complete journey with no renderer, and it is
 how both of the runtime-only traps Bevy sets (a bundle carrying the same
 component twice, two queries in one system that can alias) are caught by
@@ -253,9 +259,24 @@ write are compiled out there rather than left to fail on every stamp.
 
 ## Requirements
 
-Rust 1.97 or newer (Bevy 0.20's minimum). The 3D renderer, audio, glTF and
-animation are switched off in `Cargo.toml`, since none of them are used - which
-cuts the dependency tree to the part this game actually runs on.
+Rust 1.97 or newer (Bevy 0.20's minimum). The 3D renderer, glTF and animation
+are switched off in `Cargo.toml`, since none of them are used - which cuts the
+dependency tree to the part this game actually runs on.
+
+Sound is on, with the OGG decoder only. On Linux that wants ALSA's headers:
+
+```bash
+sudo apt install libasound2-dev     # Debian, Ubuntu
+sudo dnf install alsa-lib-devel     # Fedora
+```
+
+macOS and Windows need nothing extra. The clips themselves are not in the
+repository yet; a sound whose file is missing is simply not played, so the game
+runs and the tests pass without them. See
+[`crates/yafa_game/assets/audio/README.md`](crates/yafa_game/assets/audio/README.md)
+for what is wanted and
+[`docs/audio/sound-catalogue.md`](docs/audio/sound-catalogue.md) for the
+contract.
 
 The first build pulls in and compiles the whole engine, so expect it to take a
 while; after that, incremental builds are a few seconds. Debug builds compile

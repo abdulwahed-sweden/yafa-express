@@ -17,14 +17,17 @@
 //! * [`systems`] - the gameplay: ticketing, movement, stamping, saving.
 //! * [`ui`] - the ticket counter, station board, city panel and passport.
 //! * [`theme`] - the palette and the shared chrome.
+//! * [`audio`] - the sound catalogue, and the one system that plays it.
 //!
 //! Stations and track are addressed by `CityId` / `SegmentId` throughout.
 //! Nothing holds a reference into the network, so a system is free to read the
 //! map while mutating the passport and the train in the same breath.
 //!
 //! The app is split into [`SimulationPlugin`] - the rules, which need no
-//! window - and [`PresentationPlugin`] - everything that draws. The split is
-//! what lets the integration tests drive a whole journey headless.
+//! window - [`PresentationPlugin`] - everything that draws - and
+//! [`audio::SoundPlugin`], the only one that makes a noise. The split is what
+//! lets the integration tests drive a whole journey headless, with no
+//! renderer, no asset server and no sound card.
 
 #![forbid(unsafe_code)]
 // A Bevy system declares its whole data dependency in its signature, and a
@@ -32,6 +35,7 @@
 // readable ECS code, so they are off here rather than worked around.
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
+pub mod audio;
 pub mod components;
 pub mod map;
 pub mod strings;
@@ -110,6 +114,8 @@ impl Plugin for SimulationPlugin {
             .init_resource::<Announcer>()
             .init_resource::<JourneyScratch>()
             .init_resource::<TrafficTimer>()
+            .init_resource::<DepartureBoard>()
+            .init_resource::<Gates>()
             .init_resource::<strings::Language>()
             .insert_resource(Counting { treasury: self.passport.treasury, ..default() })
             .insert_resource(Queues(yafa_core::Platforms::new(yafa_core::Rng::seeded(
@@ -121,6 +127,8 @@ impl Plugin for SimulationPlugin {
             .add_message::<PassportStamped>()
             .add_message::<JourneyFinished>()
             .add_message::<LineOpened>()
+            .add_message::<TicketTorn>()
+            .add_message::<GateAnswered>()
             .add_message::<Takings>()
             .add_observer(systems::on_control_activated)
             .add_observer(systems::on_station_clicked)
@@ -135,6 +143,8 @@ impl Plugin for SimulationPlugin {
                 Update,
                 (
                     systems::keyboard_shortcuts,
+                    systems::work_the_gates,
+                    systems::fade_the_gates,
                     systems::apply_actions,
                     systems::train_movement_system,
                     systems::passport_stamp_system,
@@ -177,13 +187,31 @@ impl Plugin for PresentationPlugin {
                 require_markers: false,
                 picking_mode: SpritePickingMode::BoundingBox,
             })
-            .add_systems(Startup, (map::spawn_map, map::spawn_water, ui::build_ui))
+            .insert_resource(map::make_schematic_view())
+            .insert_resource(map::make_strip_view())
+            // The geographic drawing - water meshes, shorelines, the
+            // graticule, the scale bar - is kept in `map.rs` but is no longer
+            // in the draw path. The map is the schematic diagram now.
+            .add_systems(
+                Startup,
+                (
+                    map::spawn_map,
+                    map::spawn_schematic_ground,
+                    map::spawn_schematic_stations,
+                    map::spawn_schematic_marks,
+                    map::spawn_train,
+                    map::spawn_progress_strip,
+                    ui::build_ui,
+                ),
+            )
             .add_systems(
                 Update,
                 (
-                    ui::scroll_station_list,
                     ui::style_controls,
                     ui::refresh_header,
+                    ui::tick_departure_board,
+                    ui::refresh_departure_board,
+                    ui::refresh_gates,
                     ui::refresh_ticket,
                     ui::refresh_board,
                     ui::refresh_city_panel,
@@ -205,14 +233,11 @@ impl Plugin for PresentationPlugin {
                 // The country first, then the track over it, then everything
                 // that marks a place on it.
                 (
-                    map::draw_country,
-                    map::draw_shorelines,
-                    map::draw_furniture,
-                    map::draw_network,
-                    map::refresh_season,
-                    map::refresh_station_state,
-                    map::draw_station_rings,
-                    map::draw_steam,
+                    map::draw_schematic,
+                    map::refresh_schematic_stations,
+                    map::place_train,
+                    map::refresh_progress_strip,
+                    map::draw_progress_strip,
                 )
                     .chain()
                     .in_set(GameSet::Present),
@@ -225,6 +250,6 @@ pub struct YafaExpressPlugin;
 
 impl Plugin for YafaExpressPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((SimulationPlugin::from_disk(), PresentationPlugin));
+        app.add_plugins((SimulationPlugin::from_disk(), PresentationPlugin, audio::SoundPlugin));
     }
 }
