@@ -218,6 +218,17 @@ impl Passport {
 
     /// Reads a passport from disk. A missing file yields a fresh passport; a
     /// corrupt one is an error, so a save is never silently discarded.
+    ///
+    /// On the web there is no disk, so every game starts fresh and nothing is
+    /// kept. Compiled out rather than left to fail at run time: a save that
+    /// quietly errors on every stamp is worse than one that was never
+    /// promised.
+    #[cfg(target_arch = "wasm32")]
+    pub fn load(_path: &Path) -> io::Result<Self> {
+        Ok(Self::default())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load(path: &Path) -> io::Result<Self> {
         match std::fs::read_to_string(path) {
             Ok(text) => {
@@ -240,6 +251,12 @@ impl Passport {
     }
 
     /// Writes the passport, creating the directory if need be.
+    #[cfg(target_arch = "wasm32")]
+    pub fn save(&self, _path: &Path) -> io::Result<()> {
+        Ok(())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn save(&self, path: &Path) -> io::Result<()> {
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent)?;

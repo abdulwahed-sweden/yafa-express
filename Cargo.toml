@@ -27,3 +27,11 @@ opt-level = 1
 # better part of an hour on a four-core machine.
 lto = "thin"
 panic = "abort"
+# Symbol names are 40 MB of a shipped build and are no use in one.
+strip = true
+
+# The web build pays for every byte over the wire, so it is optimised for size
+# rather than speed. Use it with `--profile wasm-release`.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "s"

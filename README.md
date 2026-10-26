@@ -240,6 +240,17 @@ Every mark on the map is a gizmo line, redrawn each frame:
 - **Stamps land crooked.** Each passport card carries a small fixed tilt, and
   presses in and settles when the station is first collected.
 
+## In a browser
+
+The game also targets `wasm32-unknown-unknown`. Everything it needs is
+compiled in - the typefaces included - so there is nothing to serve but the
+page and the two files `wasm-bindgen` produces. See [web/README.md](web/) for
+the four commands.
+
+The web build cannot save: there is no filesystem to write the passport to, so
+the year, the money and the stamps last as long as the tab. The read and the
+write are compiled out there rather than left to fail on every stamp.
+
 ## Requirements
 
 Rust 1.97 or newer (Bevy 0.20's minimum). The 3D renderer, audio, glTF and

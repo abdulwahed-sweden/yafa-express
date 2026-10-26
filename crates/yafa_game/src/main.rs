@@ -20,6 +20,13 @@ fn main() -> AppExit {
                 primary_window: Some(Window {
                     title: "Yafa Express".to_owned(),
                     resolution: WindowResolution::new(WINDOW_WIDTH, WINDOW_HEIGHT),
+                    // On the web the canvas takes the page, and the browser
+                    // keeps its own keyboard shortcuts rather than having the
+                    // game swallow them.
+                    #[cfg(target_arch = "wasm32")]
+                    fit_canvas_to_parent: true,
+                    #[cfg(target_arch = "wasm32")]
+                    prevent_default_event_handling: false,
                     ..default()
                 }),
                 ..default()

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Yafa Express</title>
+    <style>
+      :root { color-scheme: light; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #f7f5ef;
+        color: #141d29;
+        font: 15px/1.5 "IBM Plex Sans", system-ui, sans-serif;
+      }
+      body { display: grid; place-items: center; }
+      /* Bevy appends its canvas to the element named in `canvas:`. */
+      canvas { display: block; max-width: 100%; max-height: 100vh; }
+      #loading {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        gap: 8px;
+        text-align: center;
+        background: #f7f5ef;
+      }
+      #loading h1 { margin: 0; font-size: 28px; font-weight: 600; color: #16243a; }
+      #loading p { margin: 0; color: #4b5563; }
+      #loading small { color: #9aa4b3; }
+    </style>
+  </head>
+  <body>
+    <div id="loading">
+      <h1>Yafa Express</h1>
+      <p>the railways of historical Palestine</p>
+      <small>loading the engine&hellip;</small>
+    </div>
+
+    <script type="module">
+      import init from "./yafa-express.js";
+      init()
+        .then(() => document.getElementById("loading")?.remove())
+        .catch((error) => {
+          // A thrown "Using exceptions for control flow" is Winit's way of
+          // handing the event loop to the browser, and is not a failure.
+          if (String(error).includes("control flow")) {
+            document.getElementById("loading")?.remove();
+            return;
+          }
+          const box = document.getElementById("loading");
+          if (box) {
+            box.innerHTML =
+              "<h1>Yafa Express</h1><p>The engine did not start.</p>" +
+              "<small>" + String(error) + "</small>";
+          }
+          throw error;
+        });
+    </script>
+  </body>
+</html>
