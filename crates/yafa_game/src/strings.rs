@@ -319,10 +319,7 @@ impl Phrase {
             WaitingOnPlatforms => ("{} waiting on the platforms", "{} في انتظار على الأرصفة"),
 
             AboutTheCity => ("About the City", "عن المدينة"),
-            AboutTheCityNote => (
-                "Click any station, on the map or in the list",
-                "انقر أي محطة، على الخريطة أو في القائمة",
-            ),
+            AboutTheCityNote => ("Click any station on the map", "انقر أي محطة على الخريطة"),
             NotYetVisited => (
                 "Not yet visited - buy a ticket through here",
                 "لم تُزر بعد - اشترِ تذكرة تمر من هنا",

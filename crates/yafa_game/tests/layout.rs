@@ -484,3 +484,25 @@ fn a_flash_fades_on_its_own() {
     tick(&mut app, Gates::FLASH);
     assert_eq!(app.world().resource::<Gates>().flashing(), None, "and then lets it go");
 }
+
+#[test]
+fn every_station_on_the_schematic_can_still_be_clicked() {
+    // The station list is gone: the map is the only way to write a ticket,
+    // so a pad that is missing, unpickable or zero-sized makes a station
+    // unreachable.
+    let mut app = headless_with_ui("every_station_on_the_schematic_can_still_be_clicked");
+    tick(&mut app, 1.0 / 60.0);
+
+    let mut pads = app.world_mut().query::<(&StationDot, &Sprite, Has<Pickable>)>();
+    let mut reachable: Vec<CityId> = Vec::new();
+    for (StationDot(city), sprite, pickable) in pads.iter(app.world()) {
+        assert!(pickable, "{city:?} has a pad the pointer cannot hit");
+        let size = sprite.custom_size.expect("a transparent pad needs an explicit size");
+        assert!(size.x > 0.0 && size.y > 0.0, "{city:?} has a pad of no size");
+        reachable.push(*city);
+    }
+
+    reachable.sort_by_key(|city| *city as usize);
+    reachable.dedup();
+    assert_eq!(reachable.len(), CITY_COUNT, "every station has exactly one pad");
+}
