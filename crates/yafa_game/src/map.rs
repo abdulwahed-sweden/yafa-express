@@ -135,8 +135,6 @@ pub fn spawn_map(mut commands: Commands, rail: Res<Rail>, view: Res<MapView>, fo
                 Pickable::IGNORE,
             ));
     }
-
-    spawn_train(&mut commands);
 }
 
 /// Which corner of the name box is pinned to the marker.
@@ -200,51 +198,73 @@ fn water_names(commands: &mut Commands, view: &MapView, fonts: &Fonts) {
     );
 }
 
-/// A small 0-4-0 tank engine, assembled from plain coloured rectangles.
+/// A small 0-4-0 tank engine, drawn as polygons.
 ///
-/// Drawn in screen pixels rather than map kilometres, and a little larger than
-/// scale: at 2.8 px to the kilometre a true-size train would be a speck.
-fn spawn_train(commands: &mut Commands) {
-    const IRON: Color = Color::srgb_u8(0x25, 0x1E, 0x1A);
-    const IRON_LIGHT: Color = Color::srgb_u8(0x3A, 0x30, 0x29);
-    /// The lamp, the boiler band and the running gear. Warm paintwork on the
-    /// engine, not a state the player is meant to read.
-    const LIVERY: Color = Color::srgb_u8(0xB8, 0x65, 0x1F);
+/// Rectangles could never give it a smokebox front, a sloped cab roof or a
+/// cowcatcher, so the whole engine is a handful of convex polygons in one
+/// mesh apiece. It is drawn half as large again as the sprites were: at 3.6
+/// pixels to the kilometre a true-size train is a speck, and this one has to
+/// read as a locomotive.
+const ENGINE_SCALE: f32 = 1.5;
 
-    commands.spawn((
-        Train,
-        Transform::from_translation(Vec3::new(0.0, 0.0, 20.0)),
-        Visibility::Hidden,
-        Name::new("Locomotive"),
-        children![
-            // Boiler.
-            (Sprite::from_color(IRON, Vec2::new(26.0, 11.0)), Transform::from_xyz(1.2, 0.0, 0.0)),
-            // Cab, at the back.
+/// Paintwork, warm against the iron. Not a state the player should read.
+const LIVERY: Color = Color::srgb_u8(0xB8, 0x65, 0x1F);
+const IRON: Color = Color::srgb_u8(0x25, 0x1E, 0x1A);
+const IRON_LIGHT: Color = Color::srgb_u8(0x3A, 0x30, 0x29);
+
+/// One piece of the engine: an outline in engine-local pixels, and its colour.
+type Part = (&'static [[f32; 2]], Color);
+
+/// The engine, nose to the right, built from the frames up.
+const ENGINE: [Part; 7] = [
+    // Footplate and frames.
+    (&[[-11.0, -4.5], [13.0, -4.5], [13.0, -2.0], [-11.0, -2.0]], IRON),
+    // Boiler, tapering to the smokebox.
+    (&[[-5.0, -2.0], [11.0, -2.0], [12.5, 0.5], [11.0, 3.5], [-5.0, 3.5]], IRON_LIGHT),
+    // Smokebox front, a touch proud of the boiler.
+    (&[[11.0, -2.0], [14.0, -0.5], [14.0, 1.5], [11.5, 3.5]], IRON),
+    // Cab, with the roof sloped back.
+    (&[[-11.0, -2.0], [-4.0, -2.0], [-4.0, 7.0], [-9.5, 8.5], [-11.0, 7.0]], IRON_LIGHT),
+    // Chimney.
+    (&[[7.0, 3.5], [10.5, 3.5], [10.0, 8.5], [7.5, 8.5]], IRON),
+    // Boiler band.
+    (&[[2.0, -2.0], [3.5, -2.0], [3.5, 3.5], [2.0, 3.5]], LIVERY),
+    // Cowcatcher.
+    (&[[13.0, -4.5], [17.0, -5.5], [17.0, -4.0], [13.0, -2.0]], LIVERY),
+];
+
+fn spawn_train(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ColorMaterial>,
+) {
+    let parts: Vec<_> = ENGINE
+        .iter()
+        .enumerate()
+        .map(|(layer, (outline, color))| {
+            let points: Vec<Vec2> =
+                outline.iter().map(|&[x, y]| Vec2::new(x, y) * ENGINE_SCALE).collect();
             (
-                Sprite::from_color(IRON_LIGHT, Vec2::new(11.0, 16.0)),
-                Transform::from_xyz(-9.4, 1.8, 0.1),
-            ),
-            // Chimney, at the front.
-            (
-                Sprite::from_color(IRON_LIGHT, Vec2::new(4.4, 8.5)),
-                Transform::from_xyz(10.0, 6.2, 0.1),
-            ),
-            // Band and lamp.
-            (
-                Sprite::from_color(LIVERY, Vec2::new(2.4, 11.0)),
-                Transform::from_xyz(6.2, 0.0, 0.2),
-            ),
-            (
-                Sprite::from_color(LIVERY, Vec2::new(3.0, 3.6)),
-                Transform::from_xyz(15.0, 0.6, 0.2),
-            ),
-            // Running gear.
-            (
-                Sprite::from_color(LIVERY, Vec2::new(23.0, 3.0)),
-                Transform::from_xyz(0.0, -6.2, 0.2),
-            ),
-        ],
-    ));
+                Mesh2d(meshes.add(fan_mesh(&points))),
+                MeshMaterial2d(materials.add(ColorMaterial::from_color(*color))),
+                Transform::from_translation(Vec3::Z * (layer as f32 * 0.01)),
+                Pickable::IGNORE,
+            )
+        })
+        .collect();
+
+    commands
+        .spawn((
+            Train,
+            Transform::from_translation(Vec3::new(0.0, 0.0, 20.0)),
+            Visibility::Hidden,
+            Name::new("Locomotive"),
+        ))
+        .with_children(|engine| {
+            for part in parts {
+                engine.spawn(part);
+            }
+        });
 }
 
 // --- The country ----------------------------------------------------------
@@ -287,6 +307,9 @@ pub fn spawn_water(
             Pickable::IGNORE,
         ));
     }
+
+    // The engine is polygons too, so it is built where the meshes are.
+    spawn_train(&mut commands, &mut meshes, &mut materials);
 }
 
 /// The sea, as one quad per stretch of shore running out to a western edge
