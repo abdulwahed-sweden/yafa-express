@@ -332,3 +332,21 @@ fn the_toggle_rebuilds_the_interface_in_the_other_language() {
     assert_eq!(root.flex_direction, FlexDirection::Row);
     assert_eq!(root.direction, InlineDirection::Rtl);
 }
+
+#[test]
+fn the_camera_is_marked_for_ui_picking() {
+    // `UiPickingSettings { require_markers: true }` keeps the panels from
+    // swallowing clicks meant for the map, but it also means the backend
+    // ignores any camera without this marker - and then no button in the game
+    // can be pressed at all, while the map carries on working and hides it.
+    let mut app = headless_with_ui("the_camera_is_marked_for_ui_picking");
+
+    let strict = app.world().resource::<UiPickingSettings>().require_markers;
+    let mut cameras = app.world_mut().query_filtered::<(), With<UiPickingCamera>>();
+    let marked = cameras.iter(app.world()).count();
+
+    assert!(
+        !strict || marked > 0,
+        "picking is set to require markers, so some camera must carry UiPickingCamera"
+    );
+}

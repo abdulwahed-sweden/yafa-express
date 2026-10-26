@@ -78,6 +78,11 @@ pub fn spawn_map(mut commands: Commands, rail: Res<Rail>, view: Res<MapView>, fo
         Camera2d,
         Camera { clear_color: ClearColorConfig::Custom(theme::DESK), ..default() },
         MapCamera,
+        // Required, not decorative: `UiPickingSettings { require_markers: true }`
+        // considers only cameras carrying this. Without it the UI picking
+        // backend silently ignores every button in the game, and the whole
+        // interface goes dead to the mouse while the map stays live.
+        UiPickingCamera,
     ));
 
     water_names(&mut commands, &view, &fonts);
