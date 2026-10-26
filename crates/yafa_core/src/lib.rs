@@ -15,7 +15,7 @@
 //!
 //! let network = Network::new();
 //! let config = JourneyConfig::default();
-//! let route = network.route(CityId::Yafa, CityId::AlQuds).expect("connected");
+//! let route = network.route(CityId::Yafa, CityId::AlQuds, 1892).expect("the 1892 line");
 //!
 //! let mut journey = Journey::board(route, &config);
 //! let mut passport = Passport::new("Traveller");
@@ -37,6 +37,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod calendar;
 pub mod city;
 pub mod coast;
 pub mod geo;
@@ -45,6 +46,7 @@ pub mod network;
 pub mod passport;
 pub mod ticket;
 
+pub use calendar::{Calendar, FIRST_YEAR, METRES_PER_YEAR};
 pub use city::{CITY_COUNT, City, CityId, Label, LabelSide, LineType};
 pub use geo::{GeoPoint, MapPoint};
 pub use journey::{Journey, JourneyConfig, JourneyEvent, Phase};

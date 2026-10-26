@@ -83,10 +83,11 @@ impl TicketDesk {
         self.origin == Some(city) || self.destination == Some(city)
     }
 
-    /// Issues the ticket, if it is complete and the stations are connected.
-    pub fn issue(&self, network: &Network) -> Option<Route> {
+    /// Issues the ticket, if it is complete and open track joins the two
+    /// stations in the given year.
+    pub fn issue(&self, network: &Network, year: u16) -> Option<Route> {
         let (origin, destination) = (self.origin?, self.destination?);
-        network.route(origin, destination)
+        network.route(origin, destination, year)
     }
 
     /// The line printed across the top of the ticket.
@@ -144,7 +145,19 @@ mod tests {
     fn a_ticket_to_nowhere_is_never_ready() {
         let desk = TicketDesk { origin: Some(CityId::Yafa), destination: Some(CityId::Yafa) };
         assert!(!desk.is_ready());
-        assert!(desk.issue(&Network::new()).is_none());
+        assert!(desk.issue(&Network::new(), 1918).is_none());
+    }
+
+    #[test]
+    fn a_ticket_over_track_not_yet_laid_cannot_be_issued() {
+        let net = Network::new();
+        let mut desk = TicketDesk::new();
+        desk.select(CityId::Akka);
+        desk.select(CityId::Yafa);
+        // The ticket is complete, but in 1892 the branch to Akka is twenty
+        // years off and the counter has nothing to sell.
+        assert!(desk.is_ready());
+        assert!(desk.issue(&net, 1892).is_none());
     }
 
     #[test]
@@ -153,9 +166,9 @@ mod tests {
         let mut desk = TicketDesk::new();
         desk.select(CityId::Akka);
         desk.select(CityId::Yafa);
-        let route = desk.issue(&net).expect("Akka to Yafa is connected");
+        let route = desk.issue(&net, 1918).expect("Akka to Yafa is connected by 1918");
         assert_eq!(route.origin(), CityId::Akka);
         assert_eq!(route.destination(), CityId::Yafa);
-        assert_eq!(route.total_m, net.route(CityId::Akka, CityId::Yafa).unwrap().total_m);
+        assert_eq!(route.total_m, net.route(CityId::Akka, CityId::Yafa, 1918).unwrap().total_m);
     }
 }

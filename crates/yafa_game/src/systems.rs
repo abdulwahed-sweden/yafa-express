@@ -69,6 +69,7 @@ pub fn apply_actions(
     mut phase: ResMut<NextState<GamePhase>>,
     mut reached: MessageWriter<TrainReached>,
     rail: Res<Rail>,
+    almanac: Res<Almanac>,
     trains: Query<(Entity, Option<&TrainRun>), With<Train>>,
 ) {
     let Ok((train, run)) = trains.single() else { return };
@@ -91,9 +92,18 @@ pub fn apply_actions(
 
         match action {
             UiAction::PickCity(city) => {
-                // Always show the history, even while the train is running.
+                // Always show the history, even while the train is running
+                // and even for a station the network has not reached yet.
                 focus.0 = Some(city);
                 if riding {
+                    continue;
+                }
+                if !rail.station_is_open(city, almanac.year()) {
+                    announcer.say(format!(
+                        "No line runs to {} in {}.",
+                        rail.city(city).name,
+                        almanac.year()
+                    ));
                     continue;
                 }
                 let _ = desk.select(city);
@@ -112,7 +122,7 @@ pub fn apply_actions(
                 if riding {
                     continue;
                 }
-                let Some(route) = desk.issue(&rail) else { continue };
+                let Some(route) = desk.issue(&rail, almanac.year()) else { continue };
                 let origin = route.origin();
                 let destination = route.destination();
                 announcer.say(format!(
@@ -231,14 +241,57 @@ pub fn passport_stamp_system(
     }
 }
 
-/// Books the finished trip in the passport's mileage record.
+/// Books the finished trip in the passport's mileage record, and winds the
+/// calendar on by the distance run.
+///
+/// Time passes because track passes: 120 km to the year. A long enough run can
+/// cross several years at once, and each may bring a line into service, so
+/// every one of them is reported.
 pub fn record_completed_journeys(
     mut finished: MessageReader<JourneyFinished>,
     mut book: ResMut<PassportBook>,
+    mut almanac: ResMut<Almanac>,
+    rail: Res<Rail>,
+    mut opened: MessageWriter<LineOpened>,
 ) {
     for trip in finished.read() {
         book.passport.record_journey(trip.track_m);
         book.unsaved = true;
+
+        for year in almanac.advance(trip.track_m) {
+            for segment in rail.segments_opening_in(year) {
+                opened.write(LineOpened { year, segment: segment.id });
+            }
+        }
+    }
+}
+
+/// Reads out each line as it comes into service.
+pub fn announce_openings(
+    rail: Res<Rail>,
+    mut opened: MessageReader<LineOpened>,
+    mut announcer: ResMut<Announcer>,
+) {
+    // Several stretches can open in one year - six did in 1917 - so they are
+    // gathered into one line rather than flooding the board.
+    let mut by_year: Vec<(u16, Vec<String>)> = Vec::new();
+    for notice in opened.read() {
+        let segment = rail.segment(notice.segment);
+        let name = format!("{}-{}", rail.city(segment.from).name, rail.city(segment.to).name);
+        match by_year.iter_mut().find(|(year, _)| *year == notice.year) {
+            Some((_, names)) => names.push(name),
+            None => by_year.push((notice.year, vec![name])),
+        }
+    }
+
+    for (year, names) in by_year {
+        announcer.say(match names.as_slice() {
+            [] => continue,
+            [one] => format!("{year}: the {one} line opens."),
+            [first, rest @ ..] => {
+                format!("{year}: the {first} line opens, and {} more with it.", rest.len())
+            }
+        });
     }
 }
 
@@ -246,10 +299,12 @@ pub fn record_completed_journeys(
 ///
 /// A failed write is reported and the dirty flag cleared, so a read-only home
 /// directory degrades to an unsaved game rather than an error every frame.
-pub fn save_passport(mut book: ResMut<PassportBook>) {
+pub fn save_passport(mut book: ResMut<PassportBook>, almanac: Res<Almanac>) {
     if !book.unsaved {
         return;
     }
+    // The year is part of the traveller's progress, and shares its file.
+    book.passport.calendar = almanac.0;
     let path = book.path.clone();
     match book.passport.save(&path) {
         Ok(()) => info!("passport saved to {}", path.display()),
@@ -315,4 +370,18 @@ pub fn opening_announcement(
     }
     // Yafa is where the first line in the country began; a fair place to start.
     focus.0 = Some(CityId::Yafa);
+}
+
+/// Says what year it is, and what that means for the map.
+pub fn opening_year_announcement(
+    rail: Res<Rail>,
+    almanac: Res<Almanac>,
+    mut announcer: ResMut<Announcer>,
+) {
+    let open = rail.open_stations(almanac.year()).count();
+    announcer.say(format!(
+        "{}. {open} of {} stations are on the network.",
+        almanac.year(),
+        yafa_core::CITY_COUNT
+    ));
 }

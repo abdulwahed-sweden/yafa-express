@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::calendar::Calendar;
 use crate::city::{CITY_COUNT, CityId, LineType};
 use crate::network::Network;
 
@@ -72,6 +73,10 @@ pub struct Passport {
     journeys_completed: u32,
     /// Lifetime odometer, in metres.
     total_track_m: u64,
+    /// Where the game stands in time. Defaulted so a passport written before
+    /// there was a calendar still reads.
+    #[serde(default)]
+    pub calendar: Calendar,
 }
 
 const fn default_version() -> u32 {
@@ -92,6 +97,7 @@ impl Passport {
             stamps: Vec::with_capacity(CITY_COUNT),
             journeys_completed: 0,
             total_track_m: 0,
+            calendar: Calendar::new(),
         }
     }
 

@@ -11,7 +11,7 @@ use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::sprite_render::ColorMaterial;
-use yafa_core::{CityId, GeoPoint, Label, LabelSide, LineType, Network, Opening, coast};
+use yafa_core::{CityId, GeoPoint, Label, LabelSide, LineType, Network, coast};
 
 use crate::components::*;
 use crate::theme::{self, Fonts};
@@ -107,11 +107,13 @@ pub fn spawn_map(mut commands: Commands, rail: Res<Rail>, view: Res<MapView>, fo
                 Name::new(data.name),
                 children![
                     (
+                        StationFace { city, inner: false },
                         Sprite::from_color(theme::MAP_INK, Vec2::splat(size)),
                         Transform::from_rotation(rotation).with_translation(Vec3::Z * 0.2),
                         Pickable::IGNORE,
                     ),
                     (
+                        StationFace { city, inner: true },
                         Sprite::from_color(
                             theme::line_color(data.line_type),
                             Vec2::splat(size - 3.4)
@@ -405,31 +407,38 @@ pub fn draw_network(
     rail: Res<Rail>,
     view: Res<MapView>,
     desk: Res<Desk>,
+    almanac: Res<Almanac>,
     runs: Query<&TrainRun>,
 ) {
     // Segments the train is working, or that the pending ticket would buy.
-    let highlighted = active_segments(&rail, &desk, runs.iter().next());
+    let highlighted = active_segments(&rail, &desk, runs.iter().next(), almanac.year());
 
     for segment in rail.segments() {
         let a = view.world(rail.position(segment.from));
         let b = view.world(rail.position(segment.to));
         let lit = highlighted.contains(&segment.id.0);
-        let color =
-            if lit { theme::line_color(segment.line) } else { theme::line_color_dim(segment.line) };
+        let open = segment.opening.is_open(almanac.year());
+        let color = match (lit, open) {
+            (true, _) => theme::line_color(segment.line),
+            (false, true) => theme::line_color_dim(segment.line),
+            // Track that exists on paper, or has not been laid yet this year.
+            (false, false) => theme::line_color_dim(segment.line).mix(&theme::DESK, 0.45),
+        };
 
-        match segment.opening {
-            Opening::Opened(_) => draw_track(&mut gizmos, a, b, color, lit),
-            Opening::Projected => draw_dashed(&mut gizmos, a, b, color),
+        if open {
+            draw_track(&mut gizmos, a, b, color, lit);
+        } else {
+            draw_dashed(&mut gizmos, a, b, color);
         }
     }
 }
 
 /// Which segments to pick out: the route being run, else the route on offer.
-fn active_segments(rail: &Rail, desk: &Desk, run: Option<&TrainRun>) -> Vec<usize> {
+fn active_segments(rail: &Rail, desk: &Desk, run: Option<&TrainRun>, year: u16) -> Vec<usize> {
     if let Some(run) = run {
         return run.route().legs.iter().map(|leg| leg.segment.0).collect();
     }
-    desk.issue(rail)
+    desk.issue(rail, year)
         .map(|route| route.legs.iter().map(|leg| leg.segment.0).collect())
         .unwrap_or_default()
 }
@@ -512,6 +521,35 @@ pub fn draw_station_rings(
             let radius = STATION_SIZE + 10.0 + pulse * 3.0;
             gizmos.circle_2d(at, radius, theme::MAP_INK.with_alpha(0.25 + pulse * 0.4));
         }
+    }
+}
+
+/// Washes out stations the network has not reached yet.
+///
+/// A station with no open track is still drawn - it is a real place, and its
+/// history can still be read - but it is plainly not somewhere a train can be
+/// sent this year.
+pub fn refresh_station_state(
+    rail: Res<Rail>,
+    almanac: Res<Almanac>,
+    mut faces: Query<(&StationFace, &mut Sprite)>,
+    mut labels: Query<(&StationLabel, &mut TextColor)>,
+) {
+    for (face, mut sprite) in &mut faces {
+        let open = rail.station_is_open(face.city, almanac.year());
+        sprite.color = match (open, face.inner) {
+            (true, true) => theme::line_color(rail.city(face.city).line_type),
+            (true, false) => theme::MAP_INK,
+            (false, true) => theme::INK_FAINT,
+            (false, false) => theme::BORDER,
+        };
+    }
+    for (StationLabel(city), mut color) in &mut labels {
+        color.0 = if rail.station_is_open(*city, almanac.year()) {
+            theme::MAP_INK
+        } else {
+            theme::INK_FAINT
+        };
     }
 }
 

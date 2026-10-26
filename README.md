@@ -23,8 +23,8 @@ cargo run --release
 3. **Passport** - each station it calls at is stamped. A station is only ever
    stamped once; the trick is to find routes that pass through places you have
    not been.
-4. The passport is written to `~/.yafa-express/passport.json`, so progress
-   survives the process.
+4. The passport is written to `~/.yafa-express/passport.json`, so progress -
+   and the year you had reached - survives the process.
 
 ### Controls
 
@@ -66,6 +66,21 @@ Station positions are real latitudes and longitudes, projected onto the map;
 segment lengths are track distances, not straight lines. Routing therefore
 produces the same answers a timetable would: Yafa to Al-Quds runs through the
 junction at Al-Ladd, because that is how the 1892 line was built.
+
+### The year
+
+The game opens in 1892, the year the line from Yafa up to Al-Quds was cut
+through. Nothing else exists yet: three stations on the whole map, and one
+route between them.
+
+Time passes because track passes. Every 120 km run moves the calendar on by a
+year, and the network opens underneath you as it does - the Jezreel valley line
+in 1904, the branch up to Akka in 1913, the military line south to Rafah in
+1917. A station the network has not reached is still drawn and its history can
+still be read, but it is washed out and the counter will not sell a ticket to
+it. The board says so as each line comes into service.
+
+Projected track never opens on its own account, however late it gets.
 
 ### Track as built, and track as imagined
 

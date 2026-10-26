@@ -301,3 +301,30 @@ pub struct StampCardCode(pub CityId);
 /// The scrolling container holding the station rows.
 #[derive(Component)]
 pub struct StationList;
+
+/// Where the game stands in time. Wound forward by the track the train runs.
+#[derive(Resource, Deref, DerefMut, Default)]
+pub struct Almanac(pub yafa_core::Calendar);
+
+/// One of the two coloured squares that make up a station marker.
+#[derive(Component, Clone, Copy)]
+pub struct StationFace {
+    pub city: CityId,
+    /// The smaller inner square, which carries the corridor's colour.
+    pub inner: bool,
+}
+
+/// The year, shown in the header beside the passport count.
+#[derive(Component)]
+pub struct HeaderYear;
+
+/// The passport count, shown in the header beside the year.
+#[derive(Component)]
+pub struct HeaderCount;
+
+/// A line opened this year and the board should say so.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct LineOpened {
+    pub year: u16,
+    pub segment: yafa_core::SegmentId,
+}

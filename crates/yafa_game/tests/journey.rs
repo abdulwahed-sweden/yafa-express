@@ -58,6 +58,17 @@ impl Harness {
         &self.app.world().resource::<PassportBook>().passport
     }
 
+    /// Winds the calendar to a year, so a test can use the whole network
+    /// without first running a few thousand kilometres to earn it.
+    fn set_year(&mut self, year: u16) {
+        *self.app.world_mut().resource_mut::<Almanac>() =
+            Almanac(yafa_core::Calendar::starting_at(year));
+    }
+
+    fn year(&self) -> u16 {
+        self.app.world().resource::<Almanac>().year()
+    }
+
     fn phase(&self) -> GamePhase {
         *self.app.world().resource::<State<GamePhase>>().get()
     }
@@ -132,6 +143,7 @@ fn stamps_are_numbered_in_the_order_the_train_called() {
 #[test]
 fn a_second_trip_over_the_same_ground_adds_no_new_stamps() {
     let mut harness = Harness::new("a_second_trip_over_the_same_ground_adds_no_new_stamps");
+    harness.set_year(1918);
     hurry_up(&mut harness);
 
     harness.travel(CityId::Yafa, CityId::AlQuds);
@@ -150,6 +162,7 @@ fn a_second_trip_over_the_same_ground_adds_no_new_stamps() {
 #[test]
 fn the_phase_follows_the_train() {
     let mut harness = Harness::new("the_phase_follows_the_train");
+    harness.set_year(1918);
     hurry_up(&mut harness);
     assert_eq!(harness.phase(), GamePhase::AtTheCounter);
 
@@ -166,6 +179,7 @@ fn the_phase_follows_the_train() {
 #[test]
 fn the_ticket_counter_fills_from_then_to() {
     let mut harness = Harness::new("the_ticket_counter_fills_from_then_to");
+    harness.set_year(1918);
 
     harness.request(UiAction::PickCity(CityId::Akka));
     harness.tick(1.0 / 60.0);
@@ -185,6 +199,7 @@ fn the_ticket_counter_fills_from_then_to() {
 #[test]
 fn the_counter_is_shut_while_the_train_is_running() {
     let mut harness = Harness::new("the_counter_is_shut_while_the_train_is_running");
+    harness.set_year(1918);
     // Deliberately slow, so the train is still out on the line.
     *harness.app.world_mut().resource_mut::<Clock>() =
         Clock(JourneyConfig { time_scale: 1.0, ..default() });
@@ -219,10 +234,11 @@ fn the_counter_is_shut_while_the_train_is_running() {
 #[test]
 fn a_lagged_frame_does_not_skip_a_station() {
     let mut harness = Harness::new("a_lagged_frame_does_not_skip_a_station");
+    harness.set_year(1918);
     hurry_up(&mut harness);
 
     harness.request(UiAction::PickCity(CityId::Akka));
-    harness.request(UiAction::PickCity(CityId::AlKhalil));
+    harness.request(UiAction::PickCity(CityId::Rafah));
     harness.tick(1.0 / 60.0);
     harness.request(UiAction::Depart);
 
@@ -237,7 +253,7 @@ fn a_lagged_frame_does_not_skip_a_station() {
     // than written down here: which towns lie between Akka and Al-Khalil is
     // the network's business, and it changes as lines are added.
     let network = Network::new();
-    let route = network.route(CityId::Akka, CityId::AlKhalil).expect("connected");
+    let route = network.route(CityId::Akka, CityId::Rafah, 1918).expect("connected");
     let passport = harness.passport();
     for city in route.stops() {
         assert!(passport.is_stamped(city), "{city:?} was skipped over");
@@ -266,6 +282,7 @@ fn the_clock_button_cycles_through_the_timetable() {
 #[test]
 fn depart_sends_an_arrived_train_back_to_the_counter() {
     let mut harness = Harness::new("depart_sends_an_arrived_train_back_to_the_counter");
+    harness.set_year(1918);
     hurry_up(&mut harness);
     harness.travel(CityId::Yafa, CityId::AlQuds);
     assert_eq!(harness.phase(), GamePhase::Arrived);
@@ -282,4 +299,53 @@ fn depart_sends_an_arrived_train_back_to_the_counter() {
     // And the counter really is open again.
     harness.travel(CityId::Haifa, CityId::Akka);
     assert!(harness.passport().is_stamped(CityId::Akka));
+}
+
+#[test]
+fn the_calendar_is_wound_on_by_the_track_run() {
+    let mut harness = Harness::new("the_calendar_is_wound_on_by_the_track_run");
+    hurry_up(&mut harness);
+    assert_eq!(harness.year(), yafa_core::FIRST_YEAR);
+
+    // Yafa to Al-Quds is 86 km, short of the 120 that makes a year.
+    harness.travel(CityId::Yafa, CityId::AlQuds);
+    assert_eq!(harness.year(), 1892);
+
+    // The return trip carries it over.
+    harness.request(UiAction::BackToCounter);
+    harness.tick(1.0 / 60.0);
+    harness.travel(CityId::AlQuds, CityId::Yafa);
+    assert_eq!(harness.year(), 1893);
+}
+
+#[test]
+fn a_station_off_the_network_cannot_be_ticketed() {
+    let mut harness = Harness::new("a_station_off_the_network_cannot_be_ticketed");
+
+    // In 1892 the branch to Akka is twenty-one years away.
+    harness.request(UiAction::PickCity(CityId::Akka));
+    harness.tick(1.0 / 60.0);
+    assert_eq!(harness.desk().origin, None, "no line runs there yet");
+    assert_eq!(
+        harness.app.world().resource::<Focus>().0,
+        Some(CityId::Akka),
+        "but its history can still be read"
+    );
+
+    // Once the years have run on, the same click books it.
+    harness.set_year(1913);
+    harness.request(UiAction::PickCity(CityId::Akka));
+    harness.tick(1.0 / 60.0);
+    assert_eq!(harness.desk().origin, Some(CityId::Akka));
+}
+
+#[test]
+fn projected_track_stays_shut_however_late_it_gets() {
+    let mut harness = Harness::new("projected_track_stays_shut_however_late_it_gets");
+    harness.set_year(1948);
+
+    // Only surveyed line runs to Safad, so no year ever opens it.
+    harness.request(UiAction::PickCity(CityId::Safad));
+    harness.tick(1.0 / 60.0);
+    assert_eq!(harness.desk().origin, None);
 }

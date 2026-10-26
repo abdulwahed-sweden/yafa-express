@@ -267,6 +267,9 @@ impl Journey {
 mod tests {
     use super::*;
 
+    /// A year by which every built line is carrying traffic.
+    const ALL_BUILT: u16 = 1918;
+
     fn test_config() -> JourneyConfig {
         JourneyConfig {
             line_speed_kmh: 60.0,
@@ -295,7 +298,7 @@ mod tests {
     fn stamps_every_station_including_both_ends() {
         let net = Network::new();
         let config = test_config();
-        let route = net.route(CityId::Akka, CityId::AlKhalil).unwrap();
+        let route = net.route(CityId::Akka, CityId::Rafah, ALL_BUILT).unwrap();
         let expected: Vec<CityId> = route.stops().collect();
         let mut journey = Journey::board(route, &config);
 
@@ -317,7 +320,7 @@ mod tests {
     fn a_single_huge_step_still_reports_every_station() {
         let net = Network::new();
         let config = test_config();
-        let route = net.route(CityId::Akka, CityId::AlKhalil).unwrap();
+        let route = net.route(CityId::Akka, CityId::Rafah, ALL_BUILT).unwrap();
         let stops: Vec<CityId> = route.stops().collect();
         let mut journey = Journey::board(route, &config);
 
@@ -334,7 +337,7 @@ mod tests {
     fn departures_and_arrivals_alternate() {
         let net = Network::new();
         let config = test_config();
-        let route = net.route(CityId::Haifa, CityId::Ghazzah).unwrap();
+        let route = net.route(CityId::Haifa, CityId::Ghazzah, ALL_BUILT).unwrap();
         let mut journey = Journey::board(route, &config);
         let events = run_to_completion(&mut journey, &config);
 
@@ -358,7 +361,7 @@ mod tests {
     fn progress_rises_monotonically_to_one() {
         let net = Network::new();
         let config = test_config();
-        let route = net.route(CityId::Safad, CityId::Yafa).unwrap();
+        let route = net.route(CityId::Beisan, CityId::Yafa, ALL_BUILT).unwrap();
         let mut journey = Journey::board(route, &config);
 
         let mut previous = 0.0;
@@ -381,7 +384,7 @@ mod tests {
     fn train_sits_at_the_platform_while_boarding() {
         let net = Network::new();
         let config = test_config();
-        let route = net.route(CityId::Yafa, CityId::AlQuds).unwrap();
+        let route = net.route(CityId::Yafa, CityId::AlQuds, ALL_BUILT).unwrap();
         let journey = Journey::board(route, &config);
         assert_eq!(journey.phase(), Phase::Boarding);
         assert_eq!(journey.standing_at(), Some(CityId::Yafa));
@@ -395,7 +398,7 @@ mod tests {
     fn a_stopped_clock_does_not_move_the_train() {
         let net = Network::new();
         let config = JourneyConfig { line_speed_kmh: 0.0, ..test_config() };
-        let route = net.route(CityId::Yafa, CityId::AlQuds).unwrap();
+        let route = net.route(CityId::Yafa, CityId::AlQuds, ALL_BUILT).unwrap();
         let mut journey = Journey::board(route, &config);
         let mut events = Vec::new();
         journey.advance(1000.0, &config, &mut events);

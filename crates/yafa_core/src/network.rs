@@ -39,6 +39,25 @@ impl Opening {
     pub const fn was_built(self) -> bool {
         matches!(self, Opening::Opened(_))
     }
+
+    /// Whether trains may run over this track in the given year.
+    ///
+    /// Projected track is never open on its own account. It becomes
+    /// `Opened(current year)` only when the player pays to lay it.
+    pub const fn is_open(self, year: u16) -> bool {
+        match self {
+            Opening::Opened(opened) => opened <= year,
+            Opening::Projected => false,
+        }
+    }
+
+    /// The year the line opened, if it ever did.
+    pub const fn year(self) -> Option<u16> {
+        match self {
+            Opening::Opened(year) => Some(year),
+            Opening::Projected => None,
+        }
+    }
 }
 
 /// A bidirectional stretch of track between two stations.
@@ -191,10 +210,36 @@ impl Network {
         self.cities.iter().filter(move |c| c.line_type == line)
     }
 
-    /// Shortest route by track distance, using Dijkstra over integer metres.
+    /// Whether a stretch of track carries traffic in the given year.
+    pub fn is_open(&self, segment: SegmentId, year: u16) -> bool {
+        self.segment(segment).opening.is_open(year)
+    }
+
+    /// Whether a station has any track at all in the given year.
     ///
-    /// Returns `None` only if `from == to`; the graph itself is connected.
-    pub fn route(&self, from: CityId, to: CityId) -> Option<Route> {
+    /// A station with none is on the map but not on the network: it cannot be
+    /// ticketed, and it is drawn washed out.
+    pub fn station_is_open(&self, city: CityId, year: u16) -> bool {
+        self.links(city).iter().any(|link| self.is_open(link.segment, year))
+    }
+
+    /// Every station the network reaches in the given year.
+    pub fn open_stations(&self, year: u16) -> impl Iterator<Item = CityId> + '_ {
+        CityId::ALL.into_iter().filter(move |&city| self.station_is_open(city, year))
+    }
+
+    /// The lines that opened in exactly this year, for the announcer.
+    pub fn segments_opening_in(&self, year: u16) -> impl Iterator<Item = &Segment> {
+        self.segments.iter().filter(move |s| s.opening.year() == Some(year))
+    }
+
+    /// Shortest route by track distance in the given year, using Dijkstra over
+    /// integer metres.
+    ///
+    /// Returns `None` if `from == to`, or if no run of open track joins them.
+    /// The second case is ordinary: in 1892 only the line from Yafa up to
+    /// Al-Quds exists, and most of the map is unreachable.
+    pub fn route(&self, from: CityId, to: CityId, year: u16) -> Option<Route> {
         if from == to {
             return None;
         }
@@ -218,6 +263,9 @@ impl Network {
                 break;
             }
             for link in self.links(here) {
+                if !self.is_open(link.segment, year) {
+                    continue;
+                }
                 let next_cost = cost + self.segment(link.segment).track_m;
                 let next_index = link.to.index();
                 if next_cost < best[next_index] {
@@ -314,16 +362,23 @@ impl Route {
 mod tests {
     use super::*;
 
+    /// By 1918 every line that was ever built is open. Projected track still
+    /// is not, and never is until it is paid for.
+    const ALL_BUILT: u16 = 1918;
+
     #[test]
-    fn every_station_is_reachable_from_every_other() {
+    fn every_station_on_open_track_is_reachable_from_every_other() {
         let net = Network::new();
-        for &from in &CityId::ALL {
-            for &to in &CityId::ALL {
+        let open: Vec<CityId> = net.open_stations(ALL_BUILT).collect();
+        assert!(open.len() > 15, "most of the network should be built by {ALL_BUILT}");
+
+        for &from in &open {
+            for &to in &open {
                 if from == to {
-                    assert!(net.route(from, to).is_none());
+                    assert!(net.route(from, to, ALL_BUILT).is_none());
                     continue;
                 }
-                let route = net.route(from, to).unwrap_or_else(|| {
+                let route = net.route(from, to, ALL_BUILT).unwrap_or_else(|| {
                     panic!("no route from {} to {}", net.city(from).name, net.city(to).name)
                 });
                 assert_eq!(route.origin(), from);
@@ -334,9 +389,51 @@ mod tests {
     }
 
     #[test]
+    fn stations_reached_only_by_projected_track_are_off_the_network() {
+        let net = Network::new();
+        // Nothing but surveyed line runs to these, so no year opens them.
+        for city in [CityId::Safad, CityId::Tabariya, CityId::Ramallah, CityId::Qaisariya] {
+            assert!(!net.station_is_open(city, ALL_BUILT), "{city:?} should be shut");
+            assert!(net.route(CityId::Yafa, city, ALL_BUILT).is_none());
+        }
+    }
+
+    #[test]
+    fn the_first_line_is_the_only_line_in_1892() {
+        let net = Network::new();
+        let route = net.route(CityId::Yafa, CityId::AlQuds, 1892).expect("the 1892 line");
+        assert_eq!(
+            route.stops().collect::<Vec<_>>(),
+            vec![CityId::Yafa, CityId::AlLadd, CityId::AlQuds]
+        );
+        // And it really is the only one: three stations on the whole map.
+        assert_eq!(net.open_stations(1892).count(), 3);
+    }
+
+    #[test]
+    fn akka_waits_for_its_branch() {
+        let net = Network::new();
+        // The branch up from Haifa opened in 1913, and not a year before.
+        assert!(!net.station_is_open(CityId::Akka, 1900));
+        assert!(net.route(CityId::Haifa, CityId::Akka, 1900).is_none());
+
+        assert!(net.station_is_open(CityId::Akka, 1913));
+        let route = net.route(CityId::Haifa, CityId::Akka, 1913).expect("open by 1913");
+        assert_eq!(route.total_m, 23_000);
+    }
+
+    #[test]
+    fn a_line_announces_itself_in_the_year_it_opens() {
+        let net = Network::new();
+        let opened: Vec<_> = net.segments_opening_in(1913).collect();
+        assert!(opened.iter().any(|s| { (s.from, s.to) == (CityId::Akka, CityId::Haifa) }));
+        assert!(net.segments_opening_in(1891).next().is_none());
+    }
+
+    #[test]
     fn route_legs_form_an_unbroken_chain() {
         let net = Network::new();
-        let route = net.route(CityId::Akka, CityId::AlKhalil).expect("route exists");
+        let route = net.route(CityId::Akka, CityId::Rafah, ALL_BUILT).expect("route exists");
         for pair in route.legs.windows(2) {
             assert_eq!(pair[0].to, pair[1].from, "legs do not join up");
         }
@@ -347,7 +444,7 @@ mod tests {
     #[test]
     fn coast_to_mountain_goes_through_a_junction() {
         let net = Network::new();
-        let route = net.route(CityId::Yafa, CityId::AlQuds).expect("route exists");
+        let route = net.route(CityId::Yafa, CityId::AlQuds, ALL_BUILT).expect("route exists");
         // Yafa hangs off Al-Ladd, so the junction must appear in the middle.
         assert_eq!(
             route.stops().collect::<Vec<_>>(),
@@ -362,7 +459,7 @@ mod tests {
         // Haifa to Nablus: down the valley line and its Jenin branch is
         // 33+28+29 = 90 km; round by the coast through Tulkarm is 68+32 = 100.
         // The branch wins, which is the way the trains actually went.
-        let route = net.route(CityId::Haifa, CityId::Nablus).expect("route exists");
+        let route = net.route(CityId::Haifa, CityId::Nablus, ALL_BUILT).expect("route exists");
         assert_eq!(
             route.stops().collect::<Vec<_>>(),
             vec![CityId::Haifa, CityId::AlNasira, CityId::Jenin, CityId::Nablus]
@@ -374,7 +471,7 @@ mod tests {
     fn a_town_on_a_line_is_a_stop_on_it() {
         let net = Network::new();
         // The 1917 line south ran through these towns rather than past them.
-        let route = net.route(CityId::AlLadd, CityId::Rafah).expect("route exists");
+        let route = net.route(CityId::AlLadd, CityId::Rafah, ALL_BUILT).expect("route exists");
         assert_eq!(
             route.stops().collect::<Vec<_>>(),
             vec![
@@ -392,13 +489,14 @@ mod tests {
     #[test]
     fn routes_are_symmetric_in_length() {
         let net = Network::new();
-        for &from in &CityId::ALL {
-            for &to in &CityId::ALL {
+        let open: Vec<CityId> = net.open_stations(ALL_BUILT).collect();
+        for &from in &open {
+            for &to in &open {
                 if from == to {
                     continue;
                 }
-                let there = net.route(from, to).unwrap();
-                let back = net.route(to, from).unwrap();
+                let there = net.route(from, to, ALL_BUILT).unwrap();
+                let back = net.route(to, from, ALL_BUILT).unwrap();
                 assert_eq!(there.total_m, back.total_m);
             }
         }

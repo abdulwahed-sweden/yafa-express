@@ -84,6 +84,9 @@ impl Plugin for SimulationPlugin {
         app.init_state::<GamePhase>()
             .insert_resource(Rail(network))
             .insert_resource(view)
+            // The year travels in the passport file, so a saved game comes
+            // back to the year it was left in.
+            .insert_resource(Almanac(self.passport.calendar))
             .insert_resource(PassportBook::new(self.passport.clone(), self.passport_path.clone()))
             .init_resource::<Desk>()
             .init_resource::<Clock>()
@@ -95,9 +98,13 @@ impl Plugin for SimulationPlugin {
             .add_message::<TrainDeparted>()
             .add_message::<PassportStamped>()
             .add_message::<JourneyFinished>()
+            .add_message::<LineOpened>()
             .add_observer(systems::on_control_activated)
             .add_observer(systems::on_station_clicked)
-            .add_systems(Startup, systems::opening_announcement)
+            .add_systems(
+                Startup,
+                (systems::opening_year_announcement, systems::opening_announcement).chain(),
+            )
             // The gameplay chain, in the order the day actually happens:
             // someone presses a button, the train moves, the clerk stamps, the
             // board announces it, and the passport is filed away.
@@ -111,6 +118,7 @@ impl Plugin for SimulationPlugin {
                     systems::record_completed_journeys,
                     systems::settle_on_arrival,
                     systems::announce,
+                    systems::announce_openings,
                     systems::save_passport,
                 )
                     .chain()
@@ -149,6 +157,7 @@ impl Plugin for PresentationPlugin {
                 (
                     ui::scroll_station_list,
                     ui::style_controls,
+                    ui::refresh_header,
                     ui::refresh_ticket,
                     ui::refresh_board,
                     ui::refresh_city_panel,
@@ -170,6 +179,7 @@ impl Plugin for PresentationPlugin {
                     map::draw_shorelines,
                     map::draw_furniture,
                     map::draw_network,
+                    map::refresh_station_state,
                     map::draw_station_rings,
                     map::draw_steam,
                 )

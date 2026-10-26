@@ -339,32 +339,73 @@ fn centre_column(root: &mut ChildSpawnerCommands, fonts: &Fonts) {
         Pickable::IGNORE,
     ))
     .with_children(|centre| {
-        centre.spawn((
-            Node {
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                row_gap: Val::Px(1.0),
-                ..default()
-            },
-            Pickable::IGNORE,
-            children![
-                (
-                    Text::new("Yafa Express"),
-                    fonts.sign_bold(theme::DISPLAY),
-                    TextColor(theme::INK_HEADER),
-                    Pickable::IGNORE,
-                ),
-                (
-                    Text::new("the railways of historical Palestine"),
-                    fonts.prose(theme::CAPTION),
-                    TextColor(theme::INK_FAINT),
-                    Pickable::IGNORE,
-                ),
-            ],
-        ));
+        header_bar(centre, fonts);
 
         station_board(centre, fonts);
     });
+}
+
+/// The bar over the map: what the game is called, what year it is, and how
+/// much of the country has been seen.
+fn header_bar(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
+    centre
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: Val::Px(20.0),
+                width: Val::Percent(100.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+        ))
+        .with_children(|bar| {
+            bar.spawn((
+                Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(1.0), ..default() },
+                Pickable::IGNORE,
+                children![
+                    (
+                        Text::new("Yafa Express"),
+                        fonts.sign_bold(theme::DISPLAY),
+                        TextColor(theme::INK_HEADER),
+                        Pickable::IGNORE,
+                    ),
+                    (
+                        Text::new("the railways of historical Palestine"),
+                        fonts.prose(theme::CAPTION),
+                        TextColor(theme::INK_FAINT),
+                        Pickable::IGNORE,
+                    ),
+                ],
+            ));
+
+            bar.spawn((
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(16.0),
+                    ..default()
+                },
+                Pickable::IGNORE,
+                children![
+                    (
+                        HeaderYear,
+                        Text::new("1892"),
+                        fonts.sign_bold(theme::DISPLAY),
+                        TextColor(theme::VISITED),
+                        Pickable::IGNORE,
+                    ),
+                    (
+                        HeaderCount,
+                        Text::new(""),
+                        fonts.data(theme::CAPTION),
+                        TextColor(theme::INK_SOFT),
+                        Pickable::IGNORE,
+                    ),
+                ],
+            ));
+        });
 }
 
 fn station_board(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
@@ -676,6 +717,7 @@ pub fn refresh_ticket(
     desk: Res<Desk>,
     clock: Res<Clock>,
     book: Res<PassportBook>,
+    almanac: Res<Almanac>,
     phase: Res<State<GamePhase>>,
     mut slots: Query<(&TicketSlot, &mut Text), (Without<TicketRouteText>, Without<ClockLabel>)>,
     mut route_text: Query<&mut Text, (With<TicketRouteText>, Without<ClockLabel>)>,
@@ -696,7 +738,7 @@ pub fn refresh_ticket(
     }
 
     if let Ok(mut text) = route_text.single_mut() {
-        text.0 = match desk.issue(&rail) {
+        text.0 = match desk.issue(&rail, almanac.year()) {
             Some(route) => {
                 // Corridor codes, not full names: the long form wrapped to
                 // three lines and pushed the station list down the panel.
@@ -709,6 +751,12 @@ pub fn refresh_ticket(
                     lines.join(" + "),
                 )
             }
+            None if desk.is_ready() => format!(
+                "No open line joins {} and {} in {}.",
+                rail.city(desk.origin.unwrap()).name,
+                rail.city(desk.destination.unwrap()).name,
+                almanac.year(),
+            ),
             None => desk.summary(&rail),
         };
     }
@@ -718,7 +766,11 @@ pub fn refresh_ticket(
     }
 
     for (StationRow(city), hovered, mut background, mut border) in &mut rows {
-        let (bg, accent) = if desk.origin == Some(*city) {
+        let (bg, accent) = if !rail.station_is_open(*city, almanac.year()) {
+            // Off the network this year: still listed, still readable, but
+            // plainly not somewhere a ticket can be bought to.
+            (theme::PAPER, Color::NONE)
+        } else if desk.origin == Some(*city) {
             (theme::PAPER_PRESSED, theme::VISITED)
         } else if desk.destination == Some(*city) {
             (theme::PAPER_PRESSED, theme::PENDING)
@@ -738,6 +790,8 @@ pub fn refresh_ticket(
             ("To", theme::PENDING)
         } else if book.passport.is_stamped(*city) {
             ("✓", theme::VISITED)
+        } else if !rail.station_is_open(*city, almanac.year()) {
+            ("no line", theme::INK_FAINT)
         } else {
             ("", theme::INK_FAINT)
         };
@@ -751,6 +805,27 @@ pub fn refresh_ticket(
         let ready = *phase.get() == GamePhase::Arrived
             || (desk.is_ready() && *phase.get() == GamePhase::AtTheCounter);
         *border = BorderColor::all(if ready { theme::VISITED } else { theme::INK_FAINT });
+    }
+}
+
+/// Keeps the header bar current.
+pub fn refresh_header(
+    rail: Res<Rail>,
+    almanac: Res<Almanac>,
+    book: Res<PassportBook>,
+    mut year: Query<&mut Text, (With<HeaderYear>, Without<HeaderCount>)>,
+    mut count: Query<&mut Text, With<HeaderCount>>,
+) {
+    if let Ok(mut text) = year.single_mut() {
+        text.0 = almanac.year().to_string();
+    }
+    if let Ok(mut text) = count.single_mut() {
+        text.0 = format!(
+            "{} / {} stamped\n{} stations on the network",
+            book.passport.visited_count(),
+            book.passport.total_cities(),
+            rail.open_stations(almanac.year()).count(),
+        );
     }
 }
 
