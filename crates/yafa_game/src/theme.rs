@@ -84,7 +84,9 @@ pub fn line_color(line: LineType) -> Color {
     match line {
         LineType::Coastal => Color::srgb_u8(0x1C, 0x8A, 0x84),
         LineType::Mountain => Color::srgb_u8(0xB8, 0x65, 0x1F),
-        LineType::Junction => Color::srgb_u8(0x6B, 0x74, 0x82),
+        // The SL concept names this one: #8b94a3, a shade lighter than the
+        // slate used for text, so the links read on the dark diagram.
+        LineType::Junction => Color::srgb_u8(0x8B, 0x94, 0xA3),
     }
 }
 

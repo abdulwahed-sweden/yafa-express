@@ -216,21 +216,19 @@ pub fn apply_actions(
 
 /// Advances the locomotive along its route and reports what it passed.
 ///
-/// All the movement rules live in `yafa_core::Journey`; this system's job is to
-/// hand it a delta time, translate its events into messages, and put the sprite
-/// where the journey says it is.
+/// All the movement rules live in `yafa_core::Journey`; this system's job is
+/// to hand it a delta time and translate its events into messages. Where the
+/// engine is then *drawn* is the map's business, not the simulation's.
 pub fn train_movement_system(
     time: Res<Time>,
     clock: Res<Clock>,
-    rail: Res<Rail>,
-    view: Res<MapView>,
     mut scratch: ResMut<JourneyScratch>,
-    mut trains: Query<(&mut TrainRun, &mut Transform), With<Train>>,
+    mut trains: Query<&mut TrainRun, With<Train>>,
     mut reached: MessageWriter<TrainReached>,
     mut departed: MessageWriter<TrainDeparted>,
     mut finished: MessageWriter<JourneyFinished>,
 ) {
-    let Ok((mut run, mut transform)) = trains.single_mut() else { return };
+    let Ok(mut run) = trains.single_mut() else { return };
 
     let (origin, destination, track_m) = {
         let route = run.route();
@@ -253,11 +251,6 @@ pub fn train_movement_system(
             }
         }
     }
-
-    let at = view.world(run.position(&rail));
-    transform.translation = at.extend(20.0);
-    let (hx, hy) = run.heading(&rail);
-    transform.rotation = Quat::from_rotation_z(hy.atan2(hx));
 }
 
 /// Moves to the "arrived" phase once the route is complete.

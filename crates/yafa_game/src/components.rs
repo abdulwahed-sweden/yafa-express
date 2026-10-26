@@ -10,6 +10,7 @@ use std::collections::VecDeque;
 use std::path::PathBuf;
 
 use bevy::prelude::*;
+use bevy::sprite_render::ColorMaterial;
 use yafa_core::{CityId, Journey, JourneyConfig, Network, Passport, TicketDesk};
 
 // --- States ---------------------------------------------------------------
@@ -471,3 +472,28 @@ pub enum ArrivalPart {
     Arabic,
     Fact,
 }
+
+/// The dark ground the schematic diagram is drawn on.
+#[derive(Component)]
+pub struct SchematicGround;
+
+/// A station on the schematic, and which shape its mark takes.
+#[derive(Component, Clone, Copy)]
+pub struct SchematicStation {
+    pub city: CityId,
+    pub capsule: bool,
+}
+
+/// A station's mark on the schematic: a dot, or a capsule if it is an
+/// interchange.
+#[derive(Component, Clone)]
+pub struct StationMark {
+    pub city: CityId,
+    /// Its own material, so its state can be coloured without disturbing the
+    /// twenty-two others.
+    pub paint: Handle<ColorMaterial>,
+}
+
+/// The Latin name set under a station's Arabic one on the schematic.
+#[derive(Component, Clone, Copy)]
+pub struct StationLatin(pub CityId);

@@ -177,7 +177,21 @@ impl Plugin for PresentationPlugin {
                 require_markers: false,
                 picking_mode: SpritePickingMode::BoundingBox,
             })
-            .add_systems(Startup, (map::spawn_map, map::spawn_water, ui::build_ui))
+            .insert_resource(map::make_schematic_view())
+            // The geographic drawing - water meshes, shorelines, the
+            // graticule, the scale bar - is kept in `map.rs` but is no longer
+            // in the draw path. The map is the schematic diagram now.
+            .add_systems(
+                Startup,
+                (
+                    map::spawn_map,
+                    map::spawn_schematic_ground,
+                    map::spawn_schematic_stations,
+                    map::spawn_schematic_marks,
+                    map::spawn_train,
+                    ui::build_ui,
+                ),
+            )
             .add_systems(
                 Update,
                 (
@@ -204,16 +218,7 @@ impl Plugin for PresentationPlugin {
                 Update,
                 // The country first, then the track over it, then everything
                 // that marks a place on it.
-                (
-                    map::draw_country,
-                    map::draw_shorelines,
-                    map::draw_furniture,
-                    map::draw_network,
-                    map::refresh_season,
-                    map::refresh_station_state,
-                    map::draw_station_rings,
-                    map::draw_steam,
-                )
+                (map::draw_schematic, map::refresh_schematic_stations, map::place_train)
                     .chain()
                     .in_set(GameSet::Present),
             );

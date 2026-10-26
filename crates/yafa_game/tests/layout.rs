@@ -18,9 +18,9 @@ use yafa_game::{GameSet, SimulationPlugin, map, ui};
 
 /// The game with its interface built, but nothing rendering it.
 ///
-/// `map::spawn_water` and the gizmo systems are left out: they are the parts
-/// of the presentation layer that need the renderer's own resources. The
-/// locomotive is built there too, so the harness spawns a bare one itself.
+/// The gizmo systems and the mesh-building ones are left out: they are the
+/// parts of the presentation layer that need the renderer's own resources.
+/// The locomotive is one of them, so the harness spawns a bare one itself.
 fn headless_with_ui(name: &str) -> App {
     let mut app = App::new();
     app.add_plugins((InputPlugin, StatesPlugin))
@@ -38,7 +38,8 @@ fn headless_with_ui(name: &str) -> App {
             require_markers: false,
             picking_mode: SpritePickingMode::BoundingBox,
         })
-        .add_systems(Startup, (map::spawn_map, ui::build_ui))
+        .insert_resource(map::make_schematic_view())
+        .add_systems(Startup, (map::spawn_map, map::spawn_schematic_stations, ui::build_ui))
         .add_systems(
             Update,
             (
