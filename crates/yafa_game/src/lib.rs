@@ -17,14 +17,17 @@
 //! * [`systems`] - the gameplay: ticketing, movement, stamping, saving.
 //! * [`ui`] - the ticket counter, station board, city panel and passport.
 //! * [`theme`] - the palette and the shared chrome.
+//! * [`audio`] - the sound catalogue, and the one system that plays it.
 //!
 //! Stations and track are addressed by `CityId` / `SegmentId` throughout.
 //! Nothing holds a reference into the network, so a system is free to read the
 //! map while mutating the passport and the train in the same breath.
 //!
 //! The app is split into [`SimulationPlugin`] - the rules, which need no
-//! window - and [`PresentationPlugin`] - everything that draws. The split is
-//! what lets the integration tests drive a whole journey headless.
+//! window - [`PresentationPlugin`] - everything that draws - and
+//! [`audio::SoundPlugin`], the only one that makes a noise. The split is what
+//! lets the integration tests drive a whole journey headless, with no
+//! renderer, no asset server and no sound card.
 
 #![forbid(unsafe_code)]
 // A Bevy system declares its whole data dependency in its signature, and a
@@ -32,6 +35,7 @@
 // readable ECS code, so they are off here rather than worked around.
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
+pub mod audio;
 pub mod components;
 pub mod map;
 pub mod strings;
@@ -246,6 +250,6 @@ pub struct YafaExpressPlugin;
 
 impl Plugin for YafaExpressPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((SimulationPlugin::from_disk(), PresentationPlugin));
+        app.add_plugins((SimulationPlugin::from_disk(), PresentationPlugin, audio::SoundPlugin));
     }
 }

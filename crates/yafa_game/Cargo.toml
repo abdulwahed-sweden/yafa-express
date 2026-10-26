@@ -14,9 +14,20 @@ path = "src/main.rs"
 [dependencies]
 yafa_core = { workspace = true }
 
-# 2D + UI only: the 3D render stack, audio, glTF and animation are not used here
-# and skipping them keeps the build an order of magnitude cheaper.
+# 2D + UI + sound: the 3D render stack, glTF and animation are not used here
+# and skipping them keeps the build an order of magnitude cheaper. `vorbis` is
+# the only decoder asked for, because the sound catalogue is OGG only.
+#
+# Linux needs ALSA's headers for this: `apt install libasound2-dev`.
 [dependencies.bevy]
 version = "0.20"
 default-features = false
-features = ["2d", "ui", "bevy_gizmos", "bevy_gizmos_render", "png"]
+features = [
+    "2d",
+    "ui",
+    "bevy_gizmos",
+    "bevy_gizmos_render",
+    "png",
+    "bevy_audio",
+    "vorbis",
+]
