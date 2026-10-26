@@ -576,7 +576,13 @@ pub fn refresh_station_state(
     }
 }
 
-/// A trail of steam behind a moving locomotive.
+/// A trail of steam, laid along the track the engine has just left.
+///
+/// The puffs are placed in the engine's own frame rather than the world's:
+/// each one is pushed back along the heading from the chimney and lifted away
+/// from the boiler, so the trail swings with the train instead of always
+/// drifting the same way up the screen. They grow and fade with age, and the
+/// whole trail scrolls through them so it reads as moving air.
 pub fn draw_steam(
     mut gizmos: Gizmos,
     view: Res<MapView>,
@@ -584,6 +590,10 @@ pub fn draw_steam(
     runs: Query<&TrainRun>,
     time: Res<Time>,
 ) {
+    const PUFFS: usize = 5;
+    /// Where the chimney stands, in engine-local pixels.
+    const CHIMNEY: Vec2 = Vec2::new(8.8 * ENGINE_SCALE, 8.5 * ENGINE_SCALE);
+
     let Ok(run) = runs.single() else { return };
     if run.standing_at().is_some() {
         return;
@@ -591,18 +601,22 @@ pub fn draw_steam(
 
     let at = view.world(run.position(&rail));
     let (hx, hy) = run.heading(&rail);
-    let back = -Vec2::new(hx, hy);
-    let drift = time.elapsed_secs();
+    let forward = Vec2::new(hx, hy);
+    // The engine's own up, so the plume lifts off the boiler whichever way
+    // the train is pointing.
+    let up = Vec2::new(-forward.y, forward.x);
+    let chimney = at + forward * CHIMNEY.x + up * CHIMNEY.y;
 
-    // Puffs fall back along the track and lift away from it, each one older,
-    // wider and fainter than the one in front.
-    for puff in 0..3 {
-        let age = puff as f32 + (drift * 1.7).fract();
-        let lift = Vec2::new(-back.y, back.x) * (age * 2.4);
-        let centre = at + back * (11.0 + age * 7.5) + lift + Vec2::Y * (4.0 + age * 2.0);
-        let radius = 2.0 + age * 2.6;
-        let alpha = (0.30 - age * 0.085).max(0.0);
-        gizmos.circle_2d(centre, radius, theme::MAP_INK.with_alpha(alpha));
+    let scroll = (time.elapsed_secs() * 1.6).fract();
+    for puff in 0..PUFFS {
+        let age = puff as f32 + scroll;
+        // Back along the track, and rising as it is left behind.
+        let centre = chimney - forward * (6.0 + age * 11.0) + up * (3.0 + age * 4.5);
+        let radius = 2.4 + age * 2.3;
+        let alpha = (0.34 - age * 0.062).max(0.0);
+        if alpha > 0.0 {
+            gizmos.circle_2d(centre, radius, theme::SLATE.with_alpha(alpha));
+        }
     }
 }
 
