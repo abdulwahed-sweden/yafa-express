@@ -185,6 +185,10 @@ does not.
 
 ## Design notes
 
+The reasoning behind the look, the planned SL-style station and in-car
+interface, and the sound catalogue are in [`docs/`](docs/README.md); the task
+backlog is in [`CLAUDE.md`](CLAUDE.md).
+
 One light page, one type family, flat colour. The only colour that carries
 meaning is the colour of a line or the state of a station.
 
