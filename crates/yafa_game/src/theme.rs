@@ -110,6 +110,22 @@ pub const BOARD_AMBER: Color = Color::srgb_u8(0xFF, 0xB0, 0x00);
 /// The second departure in each direction, held back from the first.
 pub const BOARD_AMBER_DIM: Color = Color::srgb_u8(0xC9, 0x8C, 0x00);
 
+// --- The ticket gates -----------------------------------------------------
+
+/// An open gate's signal, and the flash when a ticket is accepted. The same
+/// green as a visited station: this has happened.
+pub const GATE_OPEN: Color = VISITED;
+
+/// A gate that stays shut, and the flash when a ticket is refused. The only
+/// red in the game, and it only ever means a real error.
+pub const GATE_SHUT: Color = Color::srgb_u8(0xB4, 0x23, 0x18);
+
+/// The lit strip across an open gate.
+pub const GATE_OPEN_GLOW: Color = Color::srgb_u8(0xEA, 0xF6, 0xEE);
+
+/// The same across a shut one.
+pub const GATE_SHUT_GLOW: Color = Color::srgb_u8(0xFD, 0xEC, 0xEB);
+
 // --- The season -----------------------------------------------------------
 
 /// Where the year stands, as the map is lit.

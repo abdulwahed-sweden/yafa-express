@@ -46,6 +46,7 @@ fn headless_with_ui(name: &str) -> App {
                 ui::style_controls,
                 ui::tick_departure_board,
                 ui::refresh_departure_board,
+                ui::refresh_gates,
                 ui::refresh_ticket,
                 ui::refresh_board,
                 ui::refresh_city_panel,
@@ -411,4 +412,75 @@ fn the_board_counts_down_at_the_timetable_speed() {
     let after = app.world().resource::<DepartureBoard>().minutes[0];
 
     assert!((before - after - 1.0).abs() < 0.05, "one minute off the board: {before} -> {after}");
+}
+
+#[test]
+fn the_gates_only_open_for_a_ticket_that_is_written() {
+    let mut app = headless_with_ui("the_gates_only_open_for_a_ticket_that_is_written");
+    tick(&mut app, 1.0 / 60.0);
+
+    let shown = |app: &mut App| {
+        let mut query = app.world_mut().query_filtered::<&Node, With<GatePanel>>();
+        query.single(app.world()).expect("one gate panel").display
+    };
+    assert_eq!(shown(&mut app), Display::None, "the gates are past the counter");
+
+    // A blank ticket still gets torn, and both gates stay shut.
+    app.world_mut().write_message(ActionRequested(UiAction::ApproachGates));
+    tick(&mut app, 1.0 / 60.0);
+    assert_eq!(shown(&mut app), Display::Flex, "but the player is at them now");
+    let gates = app.world().resource::<Gates>();
+    assert!(!gates.valid, "nothing is written on it");
+    assert!(!gates.is_open(GateLane::Signalled), "so no signal is green");
+
+    app.world_mut().write_message(ActionRequested(UiAction::TapGate(GateLane::Signalled)));
+    tick(&mut app, 1.0 / 60.0);
+    assert_eq!(
+        app.world().resource::<Gates>().note,
+        yafa_game::strings::Phrase::GateNeedsTwo,
+        "and it says what is missing"
+    );
+    assert_eq!(
+        app.world().resource::<State<GamePhase>>().get(),
+        &GamePhase::AtTheCounter,
+        "no train left on a blank ticket"
+    );
+
+    // Write the ticket and the signal turns.
+    app.world_mut().write_message(ActionRequested(UiAction::PickCity(CityId::Yafa)));
+    app.world_mut().write_message(ActionRequested(UiAction::PickCity(CityId::AlLadd)));
+    tick(&mut app, 1.0 / 60.0);
+    app.world_mut().write_message(ActionRequested(UiAction::ApproachGates));
+    tick(&mut app, 1.0 / 60.0);
+    assert!(app.world().resource::<Gates>().is_open(GateLane::Signalled));
+
+    // The barred gate still refuses it, and says which gate to use.
+    app.world_mut().write_message(ActionRequested(UiAction::TapGate(GateLane::Shut)));
+    tick(&mut app, 1.0 / 60.0);
+    assert_eq!(app.world().resource::<Gates>().note, yafa_game::strings::Phrase::GateShut);
+    assert!(app.world().resource::<Gates>().showing, "the player is still outside");
+
+    // The open one takes it.
+    app.world_mut().write_message(ActionRequested(UiAction::TapGate(GateLane::Signalled)));
+    tick(&mut app, 1.0 / 60.0);
+    tick(&mut app, 1.0 / 60.0);
+    assert!(!app.world().resource::<Gates>().showing, "through the gate and gone");
+    assert_eq!(shown(&mut app), Display::None);
+}
+
+#[test]
+fn a_flash_fades_on_its_own() {
+    let mut app = headless_with_ui("a_flash_fades_on_its_own");
+    app.world_mut().write_message(ActionRequested(UiAction::ApproachGates));
+    app.world_mut().write_message(ActionRequested(UiAction::TapGate(GateLane::Shut)));
+    tick(&mut app, 1.0 / 60.0);
+    tick(&mut app, 1.0 / 60.0);
+    assert_eq!(
+        app.world().resource::<Gates>().flashing(),
+        Some((GateLane::Shut, GateVerdict::Refused)),
+        "the gate holds its colour for a moment"
+    );
+
+    tick(&mut app, Gates::FLASH);
+    assert_eq!(app.world().resource::<Gates>().flashing(), None, "and then lets it go");
 }

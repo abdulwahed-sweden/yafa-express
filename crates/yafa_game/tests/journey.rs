@@ -99,7 +99,10 @@ impl Harness {
         self.request(UiAction::PickCity(from));
         self.request(UiAction::PickCity(to));
         self.tick(1.0 / 60.0);
-        self.request(UiAction::Depart);
+        // Out through the gates, the way the player goes.
+        self.request(UiAction::ApproachGates);
+        self.tick(1.0 / 60.0);
+        self.request(UiAction::TapGate(GateLane::Signalled));
         self.tick(1.0 / 60.0);
 
         for _ in 0..4_000 {
@@ -305,7 +308,7 @@ fn depart_sends_an_arrived_train_back_to_the_counter() {
 
     // The same control the player just used to leave now books the next trip,
     // so an arrived train is never a dead end.
-    harness.request(UiAction::Depart);
+    harness.request(UiAction::ApproachGates);
     harness.tick(1.0 / 60.0);
     harness.tick(1.0 / 60.0);
 

@@ -49,7 +49,9 @@ pub fn keyboard_shortcuts(
     if keys.just_pressed(KeyCode::Space) {
         actions.write(ActionRequested(match phase.get() {
             GamePhase::Arrived => UiAction::BackToCounter,
-            _ => UiAction::Depart,
+            // Space walks the player to the gates; it is the gate that lets
+            // the train go.
+            _ => UiAction::ApproachGates,
         }));
     }
     if keys.just_pressed(KeyCode::Escape) {
@@ -58,6 +60,66 @@ pub fn keyboard_shortcuts(
     if keys.just_pressed(KeyCode::Tab) {
         actions.write(ActionRequested(UiAction::CycleClock));
     }
+}
+
+// --- The ticket gates -----------------------------------------------------
+
+/// Works the pair of gates between a written ticket and a departing train.
+///
+/// Runs just ahead of [`apply_actions`], so a ticket the gateman accepts
+/// departs in the same frame as the tap.
+pub fn work_the_gates(
+    mut commands: Commands,
+    mut requests: MessageReader<ActionRequested>,
+    mut gates: ResMut<Gates>,
+    mut torn: MessageWriter<TicketTorn>,
+    mut answered: MessageWriter<GateAnswered>,
+    desk: Res<Desk>,
+    rail: Res<Rail>,
+    almanac: Res<Almanac>,
+    trains: Query<Option<&TrainRun>, With<Train>>,
+) {
+    // A train already out means the gates are behind the player; the same
+    // control is the one that dismisses it.
+    if trains.single().is_ok_and(|run| run.is_some()) {
+        return;
+    }
+    for &ActionRequested(requested) in requests.read() {
+        match requested {
+            UiAction::ApproachGates => {
+                // The clerk tears the ticket whether or not it is any good;
+                // what the gateman makes of it is the next step. Asking again
+                // while already at the gates does not tear it twice.
+                if !gates.showing {
+                    torn.write(TicketTorn);
+                }
+                gates.approach(desk.issue(&rail, almanac.year()).is_some());
+            }
+            UiAction::TapGate(lane) => {
+                if !gates.showing {
+                    continue;
+                }
+                let verdict = gates.tap(lane);
+                answered.write(GateAnswered(verdict));
+                if verdict == GateVerdict::Passed {
+                    // Shut the gate behind the player before the departure is
+                    // asked for, so a second tap in the same breath cannot
+                    // buy a second train.
+                    gates.close();
+                    // Written through the command queue: this system already
+                    // holds the reader for this message, and a reader and a
+                    // writer of the same message cannot share a signature.
+                    commands.write_message(ActionRequested(UiAction::Depart));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Lets a gate's flash fade.
+pub fn fade_the_gates(time: Res<Time>, mut gates: ResMut<Gates>) {
+    gates.fade(time.delta_secs());
 }
 
 // --- Ticket counter -------------------------------------------------------
@@ -69,6 +131,7 @@ pub fn apply_actions(
     lang: Res<Language>,
     mut requests: MessageReader<ActionRequested>,
     mut desk: ResMut<Desk>,
+    mut gates: ResMut<Gates>,
     mut clock: ResMut<Clock>,
     mut focus: ResMut<Focus>,
     mut announcer: ResMut<Announcer>,
@@ -93,7 +156,7 @@ pub fn apply_actions(
         // Once the train is in, "depart" means the next departure - so the
         // same control sends it back to the counter rather than going dead.
         let action = match requested {
-            UiAction::Depart if arrived => UiAction::BackToCounter,
+            UiAction::ApproachGates if arrived => UiAction::BackToCounter,
             other => other,
         };
 
@@ -161,6 +224,9 @@ pub fn apply_actions(
                 });
                 announcer.say(fill(lang.say(Phrase::AnnTimetable), &[speed]));
             }
+            // The gate step is `work_the_gates`, which runs just ahead of
+            // this system and sends the departure on itself.
+            UiAction::ApproachGates | UiAction::TapGate(_) => continue,
             UiAction::Depart => {
                 if riding {
                     continue;
@@ -203,6 +269,7 @@ pub fn apply_actions(
                     .remove::<Riders>()
                     .insert(Visibility::Hidden);
                 desk.clear();
+                gates.close();
                 phase.set(GamePhase::AtTheCounter);
                 announcer.say(lang.say(Phrase::AnnCounterOpen));
                 riding = false;

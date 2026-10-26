@@ -111,6 +111,7 @@ impl Plugin for SimulationPlugin {
             .init_resource::<JourneyScratch>()
             .init_resource::<TrafficTimer>()
             .init_resource::<DepartureBoard>()
+            .init_resource::<Gates>()
             .init_resource::<strings::Language>()
             .insert_resource(Counting { treasury: self.passport.treasury, ..default() })
             .insert_resource(Queues(yafa_core::Platforms::new(yafa_core::Rng::seeded(
@@ -122,6 +123,8 @@ impl Plugin for SimulationPlugin {
             .add_message::<PassportStamped>()
             .add_message::<JourneyFinished>()
             .add_message::<LineOpened>()
+            .add_message::<TicketTorn>()
+            .add_message::<GateAnswered>()
             .add_message::<Takings>()
             .add_observer(systems::on_control_activated)
             .add_observer(systems::on_station_clicked)
@@ -136,6 +139,8 @@ impl Plugin for SimulationPlugin {
                 Update,
                 (
                     systems::keyboard_shortcuts,
+                    systems::work_the_gates,
+                    systems::fade_the_gates,
                     systems::apply_actions,
                     systems::train_movement_system,
                     systems::passport_stamp_system,
@@ -202,6 +207,7 @@ impl Plugin for PresentationPlugin {
                     ui::refresh_header,
                     ui::tick_departure_board,
                     ui::refresh_departure_board,
+                    ui::refresh_gates,
                     ui::refresh_ticket,
                     ui::refresh_board,
                     ui::refresh_city_panel,

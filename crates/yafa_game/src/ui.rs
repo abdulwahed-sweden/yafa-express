@@ -96,6 +96,7 @@ fn ticket_counter(root: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language
                     Pickable::IGNORE,
                 ));
                 departure_board(panel, fonts, lang);
+                gate_row(panel, fonts, lang);
                 control_row(panel, fonts, lang);
                 keyboard_hints(panel, fonts, lang);
             });
@@ -250,6 +251,90 @@ fn departure_board(panel: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Langua
         });
 }
 
+/// The pair of ticket gates, shown once the ticket has been torn.
+///
+/// Two leaves: the left one has the signal that turns green for a ticket the
+/// gateman will take, the right one is barred whatever the ticket says. The
+/// concept draws a rank of them; two is the smallest number that still gives
+/// the player a wrong gate to pick, which is the point of the step.
+fn gate_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
+    panel
+        .spawn((
+            GatePanel,
+            Node {
+                flex_direction: FlexDirection::Column,
+                display: Display::None,
+                row_gap: Val::Px(5.0),
+                width: Val::Percent(100.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            children![(
+                Text::new(lang.say(Phrase::Gates)),
+                fonts.data(theme::CAPTION - 2.0),
+                TextColor(theme::INK_FAINT),
+                Pickable::IGNORE,
+            )],
+        ))
+        .with_children(|gates| {
+            gates
+                .spawn((
+                    Node {
+                        flex_direction: FlexDirection::Row,
+                        column_gap: Val::Px(6.0),
+                        width: Val::Percent(100.0),
+                        ..default()
+                    },
+                    Pickable::IGNORE,
+                ))
+                .with_children(|row| {
+                    for lane in GateLane::BOTH {
+                        row.spawn((
+                            Button,
+                            UiAction::TapGate(lane),
+                            GateLeaf(lane),
+                            Hovered::default(),
+                            Pickable::default(),
+                            Node {
+                                flex_grow: 1.0,
+                                flex_basis: Val::Px(0.0),
+                                align_items: AlignItems::Center,
+                                justify_content: JustifyContent::Center,
+                                padding: UiRect::axes(Val::Px(0.0), Val::Px(10.0)),
+                                border: UiRect::all(Val::Px(2.0)),
+                                border_radius: BorderRadius::all(Val::Px(4.0)),
+                                ..default()
+                            },
+                            BackgroundColor(theme::GATE_SHUT_GLOW),
+                            BorderColor::all(theme::GATE_SHUT),
+                            children![(
+                                GateGlyph(lane),
+                                Text::new(GLYPH_SHUT),
+                                fonts.sign_bold(theme::HEADING),
+                                TextColor(theme::GATE_SHUT),
+                                Pickable::IGNORE,
+                            )],
+                        ));
+                    }
+                });
+            gates.spawn((
+                GateNote,
+                Text::new(lang.say(Phrase::GatesNote)),
+                fonts.prose(theme::CAPTION),
+                TextColor(theme::INK_SOFT),
+                LineHeight::RelativeToFont(1.4),
+                Pickable::IGNORE,
+            ));
+        });
+}
+
+/// The arrow on an open gate and the cross on a shut one.
+///
+/// Both are in the bundled Plex Sans; the heavier ballot marks the concept
+/// draws are not, and would come out as tofu.
+const GLYPH_OPEN: &str = "\u{2191}";
+const GLYPH_SHUT: &str = "\u{d7}";
+
 fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
     panel
         .spawn((
@@ -263,7 +348,9 @@ fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) 
         ))
         .with_children(|row| {
             row.spawn((
-                control_chrome(UiAction::Depart),
+                // DEPART does not start the train any more; it tears the
+                // ticket and walks the player to the gates.
+                control_chrome(UiAction::ApproachGates),
                 DepartButton,
                 Node { flex_grow: 1.0, ..control_node() },
                 children![(
@@ -869,7 +956,7 @@ fn control_chrome(action: UiAction) -> impl Bundle {
 pub fn style_controls(
     mut controls: Query<
         (&Hovered, Has<Pressed>, &mut BackgroundColor),
-        (With<UiAction>, Without<StationRow>, Without<StampCard>),
+        (With<UiAction>, Without<StationRow>, Without<StampCard>, Without<GateLeaf>),
     >,
 ) {
     for (hovered, pressed, mut background) in &mut controls {
@@ -1597,5 +1684,57 @@ fn line_number(line: LineType) -> &'static str {
         LineType::Coastal => "1",
         LineType::Mountain => "2",
         LineType::Junction => "·",
+    }
+}
+
+/// Paints the gates: the signals, the flash after a tap, and the line that
+/// says what the gateman made of the ticket.
+pub fn refresh_gates(
+    gates: Res<Gates>,
+    lang: Res<Language>,
+    mut panels: Query<&mut Node, With<GatePanel>>,
+    mut leaves: Query<(&GateLeaf, &Hovered, &mut BackgroundColor, &mut BorderColor)>,
+    mut glyphs: Query<(&GateGlyph, &mut Text, &mut TextColor), Without<GateNote>>,
+    mut notes: Query<(&mut Text, &mut TextColor), With<GateNote>>,
+) {
+    if let Ok(mut node) = panels.single_mut() {
+        node.display = if gates.showing { Display::Flex } else { Display::None };
+    }
+
+    let flashing = gates.flashing();
+    for (GateLeaf(lane), hovered, mut background, mut border) in &mut leaves {
+        let open = gates.is_open(*lane);
+        let signal = if open { theme::GATE_OPEN } else { theme::GATE_SHUT };
+        let glow = if open { theme::GATE_OPEN_GLOW } else { theme::GATE_SHUT_GLOW };
+        // A tap floods the leaf it landed on with the answer; otherwise the
+        // signal is the border and the strip behind it is the lit glow.
+        background.0 = match flashing {
+            Some((flashed, verdict)) if flashed == *lane => match verdict {
+                GateVerdict::Passed => theme::GATE_OPEN,
+                GateVerdict::Refused => theme::GATE_SHUT,
+            },
+            _ if hovered.get() => glow,
+            _ => theme::PAPER,
+        };
+        border.set_all(signal);
+    }
+
+    for (GateGlyph(lane), mut text, mut colour) in &mut glyphs {
+        let open = gates.is_open(*lane);
+        text.0 = if open { GLYPH_OPEN } else { GLYPH_SHUT }.to_owned();
+        colour.0 = match flashing {
+            Some((flashed, _)) if flashed == *lane => theme::PAPER,
+            _ if open => theme::GATE_OPEN,
+            _ => theme::GATE_SHUT,
+        };
+    }
+
+    if let Ok((mut text, mut colour)) = notes.single_mut() {
+        text.0 = lang.say(gates.note).to_owned();
+        colour.0 = match gates.note {
+            Phrase::GateThankYou => theme::GATE_OPEN,
+            Phrase::GateNeedsTwo | Phrase::GateShut => theme::GATE_SHUT,
+            _ => theme::INK_SOFT,
+        };
     }
 }

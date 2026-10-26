@@ -86,6 +86,12 @@ pub enum Phrase {
     Minutes,
     DepartingNow,
     NoDeparture,
+    Gates,
+    GatesNote,
+    GateBoardHere,
+    GateNeedsTwo,
+    GateShut,
+    GateThankYou,
     FromSelectDestination,
     TicketPair,
     NoOpenLine,
@@ -163,7 +169,7 @@ impl Phrase {
     /// Kept beside the table so the tests can sweep the lot. A new variant
     /// that is not added here is still caught by the compiler, which will
     /// reject `both` for not covering it.
-    pub const ALL: [Phrase; 73] = {
+    pub const ALL: [Phrase; 79] = {
         use Phrase::*;
         [
             TicketCounter,
@@ -178,6 +184,12 @@ impl Phrase {
             Minutes,
             DepartingNow,
             NoDeparture,
+            Gates,
+            GatesNote,
+            GateBoardHere,
+            GateNeedsTwo,
+            GateShut,
+            GateThankYou,
             FromSelectDestination,
             TicketPair,
             NoOpenLine,
@@ -260,6 +272,14 @@ impl Phrase {
             Minutes => ("{} min", "{} د"),
             DepartingNow => ("now", "الآن"),
             NoDeparture => ("no service", "لا خدمة"),
+            Gates => ("Ticket gates", "بوابات التذاكر"),
+            GatesNote => ("Tap the open gate to board", "اطرق البوابة المفتوحة للصعود"),
+            GateBoardHere => ("Open - board here", "مفتوحة - اصعد من هنا"),
+            GateNeedsTwo => ("Pick two stations before the gates", "اختر محطتين قبل البوابات"),
+            GateShut => {
+                ("This gate is closed, use a green one", "هذه البوابة مغلقة، استخدم بوابة خضراء")
+            }
+            GateThankYou => ("Ticket accepted - board the train", "قُبلت التذكرة - اصعد القطار"),
             FromSelectDestination => ("From {} - select a destination", "من {} - اختر محطة الوصول"),
             TicketPair => ("{} to {}", "{} إلى {}"),
             NoOpenLine => {
@@ -270,8 +290,8 @@ impl Phrase {
                 "{} كم  ·  {} محطات  ·  {} دقيقة  ·  {}\nالفحم {} قرش  ·  حتى {} قرش أجرة",
             ),
             Shortcuts => (
-                "Space depart · Esc clear · Tab timetable",
-                "مسافة للانطلاق · خروج للمسح · تبويب للجدول",
+                "Space gates · Esc clear · Tab timetable",
+                "مسافة للبوابات · خروج للمسح · تبويب للجدول",
             ),
 
             StationBoard => ("Station Board", "لوحة المحطة"),

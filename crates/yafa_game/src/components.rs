@@ -13,6 +13,8 @@ use bevy::prelude::*;
 use bevy::sprite_render::ColorMaterial;
 use yafa_core::{CityId, Journey, JourneyConfig, Network, Passport, TicketDesk};
 
+use crate::strings::Phrase;
+
 // --- States ---------------------------------------------------------------
 
 /// Where the player is in the loop: buying a ticket, riding, or arrived.
@@ -138,6 +140,14 @@ pub struct PassportStamped {
     pub order: u32,
 }
 
+/// The gate answered a tap: the ticket was accepted, or it was not.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct GateAnswered(pub GateVerdict);
+
+/// The clerk tore the ticket, which is what sends the player to the gates.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct TicketTorn;
+
 /// A whole route was completed.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct JourneyFinished {
@@ -182,7 +192,11 @@ pub enum UiAction {
     OpenLine(yafa_core::SegmentId),
     /// Write this station onto the ticket.
     PickCity(CityId),
-    /// Issue the ticket and start the train.
+    /// Tear the ticket and walk to the gates.
+    ApproachGates,
+    /// Offer the ticket at one of the two gates.
+    TapGate(GateLane),
+    /// Issue the ticket and start the train. Only the open gate sends this.
     Depart,
     /// Tear up the ticket.
     ClearTicket,
@@ -577,3 +591,128 @@ pub struct DepartureDest(pub usize);
 /// How long until it leaves.
 #[derive(Component, Clone, Copy)]
 pub struct DepartureTime(pub usize);
+
+// --- The ticket gates -----------------------------------------------------
+
+/// Which of the two gates was offered the ticket.
+///
+/// The first has a signal that turns green for a ticket the gateman accepts;
+/// the second is barred whatever the ticket says, and exists so that there is
+/// a wrong gate to pick.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GateLane {
+    Signalled,
+    Shut,
+}
+
+impl GateLane {
+    pub const BOTH: [GateLane; 2] = [GateLane::Signalled, GateLane::Shut];
+}
+
+/// What the gate said.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GateVerdict {
+    /// The barrier swung open.
+    Passed,
+    /// It stayed shut, with a reason.
+    Refused,
+}
+
+/// The gate step: the beat between a written ticket and a departing train.
+#[derive(Resource)]
+pub struct Gates {
+    /// Whether the player is standing at the gates.
+    pub showing: bool,
+    /// Whether the ticket in hand will actually be accepted.
+    pub valid: bool,
+    /// Which gate was tapped last, what it said, and how long is left of
+    /// the flash that says so.
+    pub flash: Option<(GateLane, GateVerdict, f32)>,
+    /// The line printed under the gates.
+    pub note: Phrase,
+}
+
+impl Default for Gates {
+    fn default() -> Self {
+        Self { showing: false, valid: false, flash: None, note: Phrase::GatesNote }
+    }
+}
+
+impl Gates {
+    /// How long a gate holds its colour after a tap.
+    pub const FLASH: f32 = 0.45;
+
+    /// Walks the player up to the gates with the ticket they have.
+    pub fn approach(&mut self, valid: bool) {
+        self.showing = true;
+        self.valid = valid;
+        self.flash = None;
+        self.note = if valid { Phrase::GatesNote } else { Phrase::GateNeedsTwo };
+    }
+
+    /// Answers a tap, and says whether the barrier opened.
+    pub fn tap(&mut self, lane: GateLane) -> GateVerdict {
+        let verdict = if self.valid && lane == GateLane::Signalled {
+            GateVerdict::Passed
+        } else {
+            GateVerdict::Refused
+        };
+        self.note = match (verdict, self.valid) {
+            (GateVerdict::Passed, _) => Phrase::GateThankYou,
+            // A ticket that is not written is the player's problem wherever
+            // they offer it; a written one offered at the barred gate is only
+            // the wrong gate.
+            (GateVerdict::Refused, true) => Phrase::GateShut,
+            (GateVerdict::Refused, false) => Phrase::GateNeedsTwo,
+        };
+        self.flash = Some((lane, verdict, Self::FLASH));
+        verdict
+    }
+
+    /// Lets the flash fade, and reports the gate to paint while it lasts.
+    pub fn fade(&mut self, dt: f32) -> Option<(GateLane, GateVerdict)> {
+        match &mut self.flash {
+            Some((lane, verdict, left)) => {
+                *left -= dt;
+                let flash = (*lane, *verdict);
+                if *left <= 0.0 {
+                    self.flash = None;
+                }
+                Some(flash)
+            }
+            None => None,
+        }
+    }
+
+    /// The gate that is flashing, if one is.
+    pub fn flashing(&self) -> Option<(GateLane, GateVerdict)> {
+        self.flash.map(|(lane, verdict, _)| (lane, verdict))
+    }
+
+    /// Whether this gate's signal is showing green.
+    pub fn is_open(&self, lane: GateLane) -> bool {
+        self.valid && lane == GateLane::Signalled
+    }
+
+    /// Back to the counter; the gates are behind the player now.
+    pub fn close(&mut self) {
+        self.showing = false;
+        self.flash = None;
+    }
+}
+
+/// The pair of gates in the ticket panel, hidden until the ticket is torn.
+#[derive(Component)]
+pub struct GatePanel;
+
+/// One gate leaf: its frame takes the colour of the signal.
+#[derive(Component, Clone, Copy)]
+pub struct GateLeaf(pub GateLane);
+
+/// The arrow or the cross on a gate.
+#[derive(Component, Clone, Copy)]
+pub struct GateGlyph(pub GateLane);
+
+/// The line under the gates that says what just happened.
+#[derive(Component)]
+pub struct GateNote;
