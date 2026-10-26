@@ -7,6 +7,10 @@ use yafa_core::{CityId, Journey, JourneyEvent, StampOutcome};
 
 use crate::components::*;
 
+/// The last year any line actually opened. Anything dated later than this was
+/// laid by the player and has to be written back into the save.
+const LAST_HISTORICAL_YEAR: u16 = 1917;
+
 // --- Input ----------------------------------------------------------------
 
 /// Turns a button activation into an [`ActionRequested`].
@@ -68,7 +72,8 @@ pub fn apply_actions(
     mut announcer: ResMut<Announcer>,
     mut phase: ResMut<NextState<GamePhase>>,
     mut reached: MessageWriter<TrainReached>,
-    rail: Res<Rail>,
+    mut rail: ResMut<Rail>,
+    mut counting: ResMut<Counting>,
     almanac: Res<Almanac>,
     trains: Query<(Entity, Option<&TrainRun>), With<Train>>,
 ) {
@@ -109,6 +114,29 @@ pub fn apply_actions(
                 let _ = desk.select(city);
             }
             UiAction::ShowCity(city) => focus.0 = Some(city),
+            UiAction::OpenLine(segment) => {
+                let (name, cost) = {
+                    let track = rail.segment(segment);
+                    (
+                        format!("{}-{}", rail.city(track.from).name, rail.city(track.to).name),
+                        counting.tariff.track(track.track_m),
+                    )
+                };
+                if !counting.treasury.debit(cost) {
+                    announcer.say(format!(
+                        "The {name} line costs {cost} piastres; the railway has {}.",
+                        counting.treasury.balance()
+                    ));
+                    continue;
+                }
+                let year = almanac.year();
+                if rail.0.open_line(segment, year) {
+                    announcer.say(format!("{year}: the {name} line is laid, for {cost} piastres."));
+                } else {
+                    // Already built: hand the money straight back.
+                    counting.treasury.credit(cost);
+                }
+            }
             UiAction::ClearTicket => {
                 if !riding {
                     desk.clear();
@@ -138,15 +166,25 @@ pub fn apply_actions(
                 reached.write(TrainReached { city: origin, final_stop: false });
                 focus.0 = Some(origin);
 
-                commands
-                    .entity(train)
-                    .insert((TrainRun(Journey::board(route, &clock.0)), Visibility::Visible));
+                let coal = counting.tariff.coal(route.total_m);
+                counting.treasury.credit(-coal);
+                announcer.say(format!("Coal for the run: {coal} piastres."));
+
+                commands.entity(train).insert((
+                    TrainRun(Journey::board(route, &clock.0)),
+                    Riders::default(),
+                    Visibility::Visible,
+                ));
                 phase.set(GamePhase::OnTheRails);
                 riding = true;
                 arrived = false;
             }
             UiAction::BackToCounter => {
-                commands.entity(train).remove::<TrainRun>().insert(Visibility::Hidden);
+                commands
+                    .entity(train)
+                    .remove::<TrainRun>()
+                    .remove::<Riders>()
+                    .insert(Visibility::Hidden);
                 desk.clear();
                 phase.set(GamePhase::AtTheCounter);
                 announcer.say("Ticket counter open.");
@@ -299,12 +337,30 @@ pub fn announce_openings(
 ///
 /// A failed write is reported and the dirty flag cleared, so a read-only home
 /// directory degrades to an unsaved game rather than an error every frame.
-pub fn save_passport(mut book: ResMut<PassportBook>, almanac: Res<Almanac>) {
+pub fn save_passport(
+    mut book: ResMut<PassportBook>,
+    almanac: Res<Almanac>,
+    counting: Res<Counting>,
+    rail: Res<Rail>,
+) {
     if !book.unsaved {
         return;
     }
-    // The year is part of the traveller's progress, and shares its file.
+    // The year, the money and the lines that were paid for are all part of
+    // the traveller's progress, and share its file.
     book.passport.calendar = almanac.0;
+    book.passport.treasury = counting.treasury;
+    book.passport.bought_lines = rail
+        .segments()
+        .iter()
+        .filter_map(|segment| match segment.opening {
+            // Anything open later than the table says was bought.
+            yafa_core::Opening::Opened(year) if year > LAST_HISTORICAL_YEAR => {
+                Some(yafa_core::passport::BoughtLine { from: segment.from, to: segment.to, year })
+            }
+            _ => None,
+        })
+        .collect();
     let path = book.path.clone();
     match book.passport.save(&path) {
         Ok(()) => info!("passport saved to {}", path.display()),
@@ -384,4 +440,85 @@ pub fn opening_year_announcement(
         almanac.year(),
         yafa_core::CITY_COUNT
     ));
+}
+
+// --- Passengers and money -------------------------------------------------
+
+/// Draws fresh travellers onto the open platforms.
+///
+/// On a timer rather than every frame: at sixty ticks a second every platform
+/// on the network would be full inside a second and the queues would mean
+/// nothing.
+pub fn fill_platforms(
+    time: Res<Time>,
+    rail: Res<Rail>,
+    almanac: Res<Almanac>,
+    mut timer: ResMut<TrafficTimer>,
+    mut queues: ResMut<Queues>,
+) {
+    if !timer.0.tick(time.delta()).just_finished() {
+        return;
+    }
+    queues.tick(&rail, almanac.year());
+}
+
+/// Works the doors: everyone bound for this station gets off and pays, then
+/// everyone going the train's way gets on.
+///
+/// Fares are collected here rather than at the end of the trip, because a
+/// passenger pays for the distance they were carried and most of them are not
+/// riding to the terminus.
+pub fn work_the_doors(
+    mut arrivals: MessageReader<TrainReached>,
+    rail: Res<Rail>,
+    mut counting: ResMut<Counting>,
+    mut queues: ResMut<Queues>,
+    mut trains: Query<(&TrainRun, &mut Riders)>,
+    mut takings: MessageWriter<Takings>,
+) {
+    let Ok((run, mut riders)) = trains.single_mut() else { return };
+
+    for arrival in arrivals.read() {
+        let leaving = riders.alight_at(arrival.city);
+        let mut earned = 0;
+        for rider in &leaving {
+            // What they actually travelled, not what the train will run.
+            let carried =
+                rail.route(rider.boarded_at, arrival.city, u16::MAX).map_or(0, |leg| leg.total_m);
+            earned += counting.tariff.fare(carried);
+        }
+        if earned > 0 {
+            counting.treasury.credit(earned);
+            takings.write(Takings {
+                piastres: earned,
+                at: Some(arrival.city),
+                passengers: leaving.len(),
+            });
+        }
+
+        if !arrival.final_stop {
+            riders.board_at(&mut queues.0, arrival.city, run.route());
+        }
+    }
+}
+
+/// Reads the takings out on the board.
+pub fn announce_takings(
+    rail: Res<Rail>,
+    mut takings: MessageReader<Takings>,
+    mut announcer: ResMut<Announcer>,
+) {
+    for take in takings.read() {
+        let Some(city) = take.at else { continue };
+        let who = if take.passengers == 1 {
+            "one passenger".to_owned()
+        } else {
+            format!("{} passengers", take.passengers)
+        };
+        announcer.say(format!(
+            "Set down {who} at {} - {} piastres.",
+            rail.city(city).name,
+            take.piastres,
+        ));
+    }
 }

@@ -42,14 +42,18 @@ pub mod city;
 pub mod coast;
 pub mod geo;
 pub mod journey;
+pub mod money;
 pub mod network;
 pub mod passport;
 pub mod ticket;
+pub mod traffic;
 
 pub use calendar::{Calendar, FIRST_YEAR, METRES_PER_YEAR};
 pub use city::{CITY_COUNT, City, CityId, Label, LabelSide, LineType};
 pub use geo::{GeoPoint, MapPoint};
 pub use journey::{Journey, JourneyConfig, JourneyEvent, Phase};
+pub use money::{Tariff, Treasury};
 pub use network::{Leg, Link, Network, Opening, Route, Segment, SegmentId};
 pub use passport::{LineProgress, Passport, Stamp, StampOutcome};
 pub use ticket::{DeskAction, TicketDesk};
+pub use traffic::{Aboard, Manifest, Passenger, Platform, Platforms, Rng};

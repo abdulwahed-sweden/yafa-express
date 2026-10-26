@@ -170,6 +170,8 @@ pub struct StationLabel(pub CityId);
 /// control never means adding a system.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiAction {
+    /// Pay to lay a surveyed line, bringing it into service this year.
+    OpenLine(yafa_core::SegmentId),
     /// Write this station onto the ticket.
     PickCity(CityId),
     /// Issue the ticket and start the train.
@@ -229,8 +231,6 @@ pub enum CityPanelPart {
     Name,
     Subtitle,
     Fact,
-    /// The track running out of this station, and when it was laid.
-    Links,
     Stamped,
 }
 
@@ -328,3 +328,66 @@ pub struct LineOpened {
     pub year: u16,
     pub segment: yafa_core::SegmentId,
 }
+
+/// The money the railway has, and what it charges.
+#[derive(Resource)]
+pub struct Counting {
+    pub treasury: yafa_core::Treasury,
+    pub tariff: yafa_core::Tariff,
+}
+
+impl Default for Counting {
+    fn default() -> Self {
+        Self { treasury: yafa_core::Treasury::new(), tariff: yafa_core::Tariff::default() }
+    }
+}
+
+/// Who is waiting on every platform.
+#[derive(Resource, Deref, DerefMut, Default)]
+pub struct Queues(pub yafa_core::Platforms);
+
+/// How often the stations draw a fresh traveller.
+#[derive(Resource)]
+pub struct TrafficTimer(pub Timer);
+
+impl Default for TrafficTimer {
+    fn default() -> Self {
+        Self(Timer::from_seconds(0.45, TimerMode::Repeating))
+    }
+}
+
+/// Who is on the train. Present only while it is working a route.
+#[derive(Component, Deref, DerefMut, Default)]
+pub struct Riders(pub yafa_core::Manifest);
+
+/// A fare was collected, or coal was burnt.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Takings {
+    pub piastres: i64,
+    pub at: Option<CityId>,
+    pub passengers: usize,
+}
+
+/// The balance, shown in the header.
+#[derive(Component)]
+pub struct HeaderBalance;
+
+/// How many are aboard, shown on the station board.
+#[derive(Component)]
+pub struct BoardRiders;
+
+/// One row of the city card's track list, with its "Open line" control.
+#[derive(Component, Clone, Copy)]
+pub struct CityLinkRow(pub usize);
+
+/// The text of a track-list row.
+#[derive(Component, Clone, Copy)]
+pub struct CityLinkText(pub usize);
+
+/// The "Open line" control on a track-list row.
+#[derive(Component, Clone, Copy)]
+pub struct CityLinkBuy(pub usize);
+
+/// The label on that control.
+#[derive(Component, Clone, Copy)]
+pub struct CityLinkBuyLabel(pub usize);

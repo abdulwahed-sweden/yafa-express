@@ -37,6 +37,7 @@ cargo run --release
 | `Esc` | Tear up the ticket |
 | `Tab` | Cycle the timetable speed (Local / Express / Mail) |
 | Click a passport card | Read that station's history |
+| `Lay` on a surveyed line | Pay to build it, in the city card |
 
 ---
 
@@ -80,7 +81,28 @@ in 1904, the branch up to Akka in 1913, the military line south to Rafah in
 still be read, but it is washed out and the counter will not sell a ticket to
 it. The board says so as each line comes into service.
 
-Projected track never opens on its own account, however late it gets.
+Projected track never opens on its own account, however late it gets. It has to
+be paid for.
+
+### Passengers and money
+
+The railway opens with 500 piastres. Travellers gather on every platform the
+network reaches, bound for somewhere else on it - how often a station produces
+one, and how often it is where somebody is going, follow its importance, so the
+great ports and Al-Quds carry the traffic and the halts on the southern line
+barely register.
+
+A train takes on everyone whose destination is still ahead of it, up to forty
+seats, and sets them down as it goes. Each pays five piastres plus fifteen
+hundredths a kilometre for the distance they were actually carried - measured
+along the train's own line, not the shortest way between the two. Coal costs a
+piastre every two kilometres and is paid on departure, whether anybody rides or
+not.
+
+That is what buys the rest of the map. A surveyed line costs ten piastres a
+kilometre to lay; pay for it and it opens in the current year, and the stations
+at its ends join the network for good. Safad, Tabariya, Ramallah, Qaisariya and
+Al-Khalil can be reached no other way.
 
 ### Track as built, and track as imagined
 

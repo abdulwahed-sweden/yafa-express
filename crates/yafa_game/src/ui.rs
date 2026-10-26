@@ -27,6 +27,8 @@ const RIGHT_WIDTH: f32 = 348.0;
 const BOARD_WIDTH: f32 = 560.0;
 /// The station list is taller than the panel; past this it scrolls.
 const LIST_HEIGHT: f32 = 330.0;
+/// No station on the map has more than four lines leaving it.
+const MAX_LINKS: usize = 4;
 /// Stamp cards, four to a row inside the passport.
 const CARD_WIDTH: f32 = 74.0;
 const CARD_HEIGHT: f32 = 48.0;
@@ -397,6 +399,13 @@ fn header_bar(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
                         Pickable::IGNORE,
                     ),
                     (
+                        HeaderBalance,
+                        Text::new(""),
+                        fonts.sign_bold(theme::HEADING),
+                        TextColor(theme::INK_HEADER),
+                        Pickable::IGNORE,
+                    ),
+                    (
                         HeaderCount,
                         Text::new(""),
                         fonts.data(theme::CAPTION),
@@ -427,6 +436,13 @@ fn station_board(centre: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 fonts.prose(theme::CAPTION),
                 TextColor(theme::INK_SOFT),
                 LineHeight::RelativeToFont(1.4),
+                Pickable::IGNORE,
+            ));
+            panel.spawn((
+                BoardRiders,
+                Text::new(""),
+                fonts.data(theme::CAPTION),
+                TextColor(theme::INK_SOFT),
                 Pickable::IGNORE,
             ));
             progress_bar(panel, BoardProgressFill, theme::VISITED);
@@ -515,14 +531,7 @@ fn city_panel(column: &mut ChildSpawnerCommands, fonts: &Fonts) {
                 LineHeight::RelativeToFont(1.5),
                 Pickable::IGNORE,
             ),
-            (
-                CityPanelPart::Links,
-                Text::new(""),
-                fonts.data(theme::CAPTION),
-                TextColor(theme::SLATE),
-                LineHeight::RelativeToFont(1.5),
-                Pickable::IGNORE,
-            ),
+            track_list(fonts),
             (
                 CityPanelPart::Stamped,
                 Text::new(""),
@@ -534,6 +543,77 @@ fn city_panel(column: &mut ChildSpawnerCommands, fonts: &Fonts) {
             ),
         ],
     ));
+}
+
+/// The track running out of a station, a row apiece.
+///
+/// Four rows are spawned once and shown or hidden as the focus moves, because
+/// no station on the map has more than four lines leaving it. A row whose line
+/// is still only surveyed carries the control that pays to lay it.
+fn track_list(fonts: &Fonts) -> impl Bundle {
+    // The spawner outlives the borrow, so it gets its own copies of the faces.
+    let (caption, label) = (fonts.data(theme::CAPTION), fonts.data(theme::CAPTION));
+    (
+        Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(3.0),
+            width: Val::Percent(100.0),
+            ..default()
+        },
+        Pickable::IGNORE,
+        Children::spawn(SpawnIter((0..MAX_LINKS).map(move |index| {
+            (
+                CityLinkRow(index),
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::SpaceBetween,
+                    column_gap: Val::Px(8.0),
+                    width: Val::Percent(100.0),
+                    ..default()
+                },
+                Pickable::IGNORE,
+                children![
+                    (
+                        CityLinkText(index),
+                        Text::new(""),
+                        caption.clone(),
+                        TextColor(theme::SLATE),
+                        Node { flex_grow: 1.0, ..default() },
+                        Pickable::IGNORE,
+                    ),
+                    (
+                        CityLinkBuy(index),
+                        Button,
+                        // Replaced as the focus moves; never fires as spawned.
+                        UiAction::ShowCity(CityId::Yafa),
+                        Hovered::default(),
+                        Pickable::default(),
+                        Node {
+                            padding: UiRect::axes(Val::Px(8.0), Val::Px(3.0)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            border_radius: BorderRadius::all(Val::Px(2.0)),
+                            // Fixed, so the label never squeezes to three
+                            // lines when the row's text runs long.
+                            min_width: Val::Px(96.0),
+                            flex_shrink: 0.0,
+                            justify_content: JustifyContent::Center,
+                            ..default()
+                        },
+                        BackgroundColor(theme::PAPER_DEEP),
+                        BorderColor::all(theme::BORDER),
+                        children![(
+                            CityLinkBuyLabel(index),
+                            Text::new(""),
+                            label.clone(),
+                            TextColor(theme::INK_SOFT),
+                            Pickable::IGNORE,
+                        )],
+                    ),
+                ],
+            )
+        }))),
+    )
 }
 
 fn passport_panel(column: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
@@ -718,6 +798,7 @@ pub fn refresh_ticket(
     clock: Res<Clock>,
     book: Res<PassportBook>,
     almanac: Res<Almanac>,
+    counting: Res<Counting>,
     phase: Res<State<GamePhase>>,
     mut slots: Query<(&TicketSlot, &mut Text), (Without<TicketRouteText>, Without<ClockLabel>)>,
     mut route_text: Query<&mut Text, (With<TicketRouteText>, Without<ClockLabel>)>,
@@ -743,12 +824,18 @@ pub fn refresh_ticket(
                 // Corridor codes, not full names: the long form wrapped to
                 // three lines and pushed the station list down the panel.
                 let lines: Vec<&str> = route.lines_used().iter().map(|l| l.code()).collect();
+                // What the run is worth if the train fills, against what the
+                // coal will cost whether it does or not.
+                let seats = yafa_core::traffic::TRAIN_CAPACITY as i64;
+                let best = counting.tariff.fare(route.total_m) * seats;
                 format!(
-                    "{:.0} km  ·  {} calls  ·  {:.0} min  ·  {}",
+                    "{:.0} km  ·  {} calls  ·  {:.0} min  ·  {}\ncoal {} pi  ·  up to {} pi in fares",
                     route.total_km(),
                     route.legs.len(),
                     clock.running_minutes(route.total_m),
                     lines.join(" + "),
+                    counting.tariff.coal(route.total_m),
+                    best,
                 )
             }
             None if desk.is_ready() => format!(
@@ -813,9 +900,14 @@ pub fn refresh_header(
     rail: Res<Rail>,
     almanac: Res<Almanac>,
     book: Res<PassportBook>,
-    mut year: Query<&mut Text, (With<HeaderYear>, Without<HeaderCount>)>,
+    counting: Res<Counting>,
+    mut year: Query<&mut Text, (With<HeaderYear>, Without<HeaderCount>, Without<HeaderBalance>)>,
+    mut balance: Query<&mut Text, (With<HeaderBalance>, Without<HeaderCount>)>,
     mut count: Query<&mut Text, With<HeaderCount>>,
 ) {
+    if let Ok(mut text) = balance.single_mut() {
+        text.0 = format!("{} pi", counting.treasury.balance());
+    }
     if let Ok(mut text) = year.single_mut() {
         text.0 = almanac.year().to_string();
     }
@@ -837,13 +929,33 @@ pub fn refresh_board(
     runs: Query<&TrainRun>,
     mut status: Query<
         &mut Text,
-        (With<BoardStatus>, Without<BoardDetail>, Without<BoardAnnouncements>),
+        (
+            With<BoardStatus>,
+            Without<BoardDetail>,
+            Without<BoardAnnouncements>,
+            Without<BoardRiders>,
+        ),
     >,
-    mut detail: Query<&mut Text, (With<BoardDetail>, Without<BoardAnnouncements>)>,
-    mut announcements: Query<&mut Text, With<BoardAnnouncements>>,
+    mut detail: Query<
+        &mut Text,
+        (With<BoardDetail>, Without<BoardAnnouncements>, Without<BoardRiders>),
+    >,
+    mut announcements: Query<&mut Text, (With<BoardAnnouncements>, Without<BoardRiders>)>,
+    mut aboard: Query<&mut Text, With<BoardRiders>>,
     mut fill: Query<&mut Node, With<BoardProgressFill>>,
+    riders: Query<&Riders>,
+    queues: Res<Queues>,
 ) {
     let run = runs.iter().next();
+
+    if let Ok(mut text) = aboard.single_mut() {
+        text.0 = match riders.iter().next() {
+            Some(riders) => {
+                format!("{} aboard of {} seats", riders.len(), yafa_core::traffic::TRAIN_CAPACITY)
+            }
+            None => format!("{} waiting on the platforms", queues.total_waiting()),
+        };
+    }
 
     let (headline, body, progress) = match run {
         None => (
@@ -911,20 +1023,6 @@ pub fn refresh_city_panel(
                 format!("{exonym}{}  ·  {}", data.line_type.label(), city.code())
             }
             CityPanelPart::Fact => data.historical_fact.to_owned(),
-            CityPanelPart::Links => rail
-                .links(city)
-                .iter()
-                .map(|link| {
-                    let segment = rail.segment(link.segment);
-                    format!(
-                        "to {} - {:.0} km, {}",
-                        rail.city(link.to).name,
-                        segment.track_km(),
-                        segment.opening.label(),
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n"),
             CityPanelPart::Stamped => match stamp {
                 Some(stamp) => {
                     format!("Stamped - the {} station in this passport", ordinal(stamp.order))
@@ -1122,6 +1220,77 @@ pub fn scroll_station_list(
     for (hovered, mut scroll) in &mut lists {
         if hovered.get() {
             scroll.0.y = (scroll.0.y - ticks).max(0.0);
+        }
+    }
+}
+
+/// Fills the city card's track list, and offers to lay what is still on paper.
+pub fn refresh_track_list(
+    rail: Res<Rail>,
+    focus: Res<Focus>,
+    almanac: Res<Almanac>,
+    counting: Res<Counting>,
+    mut rows: Query<(&CityLinkRow, &mut Node)>,
+    mut texts: Query<(&CityLinkText, &mut Text), Without<CityLinkBuyLabel>>,
+    mut buys: Query<
+        (&CityLinkBuy, &mut UiAction, &mut Node, &mut BorderColor),
+        Without<CityLinkRow>,
+    >,
+    mut labels: Query<(&CityLinkBuyLabel, &mut Text, &mut TextColor)>,
+) {
+    let Some(city) = focus.0 else { return };
+    let year = almanac.year();
+
+    // What each row should say, in the order the links come off the station.
+    let links: Vec<(String, Option<(yafa_core::SegmentId, i64, bool)>)> = rail
+        .links(city)
+        .iter()
+        .map(|link| {
+            let segment = rail.segment(link.segment);
+            let open = segment.opening.is_open(year);
+            // Short form in the list: the row has a priced control beside it
+            // and no width to spare for "never completed".
+            let text = format!(
+                "to {} - {:.0} km, {}",
+                rail.city(link.to).name,
+                segment.track_km(),
+                match segment.opening.year() {
+                    Some(year) => format!("opened {year}"),
+                    None => "on paper".to_owned(),
+                },
+            );
+            let offer = (!open).then(|| {
+                let cost = counting.tariff.track(segment.track_m);
+                (segment.id, cost, counting.treasury.can_afford(cost))
+            });
+            (text, offer)
+        })
+        .take(MAX_LINKS)
+        .collect();
+
+    for (CityLinkRow(index), mut node) in &mut rows {
+        node.display = if *index < links.len() { Display::Flex } else { Display::None };
+    }
+    for (CityLinkText(index), mut text) in &mut texts {
+        text.0 = links.get(*index).map(|(line, _)| line.clone()).unwrap_or_default();
+    }
+    for (CityLinkBuy(index), mut action, mut node, mut border) in &mut buys {
+        match links.get(*index).and_then(|(_, offer)| *offer) {
+            Some((segment, _, affordable)) => {
+                node.display = Display::Flex;
+                *action = UiAction::OpenLine(segment);
+                *border = BorderColor::all(if affordable { theme::VISITED } else { theme::BORDER });
+            }
+            None => node.display = Display::None,
+        }
+    }
+    for (CityLinkBuyLabel(index), mut text, mut color) in &mut labels {
+        match links.get(*index).and_then(|(_, offer)| *offer) {
+            Some((_, cost, affordable)) => {
+                text.0 = format!("Lay  {cost} pi");
+                color.0 = if affordable { theme::VISITED } else { theme::INK_FAINT };
+            }
+            None => text.0.clear(),
         }
     }
 }

@@ -9,7 +9,7 @@ use std::time::Duration;
 use bevy::input::InputPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
-use yafa_core::{CityId, JourneyConfig, Network, Passport};
+use yafa_core::{CityId, JourneyConfig, Network, Passenger, Passport};
 use yafa_game::SimulationPlugin;
 use yafa_game::components::*;
 
@@ -31,6 +31,7 @@ impl Harness {
             passport_path: std::env::temp_dir()
                 .join("yafa-express-tests")
                 .join(format!("{name}.json")),
+            traffic_seed: 0xC0FFEE,
         });
 
         // No `TimePlugin`, so `Time` is ours to advance deterministically.
@@ -67,6 +68,21 @@ impl Harness {
 
     fn year(&self) -> u16 {
         self.app.world().resource::<Almanac>().year()
+    }
+
+    /// Holds the traffic generator still, so a test can lay out exactly the
+    /// passengers it means to and have nobody else wander onto the platform.
+    fn stop_traffic(&mut self) {
+        *self.app.world_mut().resource_mut::<TrafficTimer>() =
+            TrafficTimer(Timer::from_seconds(1.0e6, TimerMode::Repeating));
+    }
+
+    fn balance(&self) -> i64 {
+        self.app.world().resource::<Counting>().treasury.balance()
+    }
+
+    fn credit(&mut self, piastres: i64) {
+        self.app.world_mut().resource_mut::<Counting>().treasury.credit(piastres);
     }
 
     fn phase(&self) -> GamePhase {
@@ -348,4 +364,97 @@ fn projected_track_stays_shut_however_late_it_gets() {
     harness.request(UiAction::PickCity(CityId::Safad));
     harness.tick(1.0 / 60.0);
     assert_eq!(harness.desk().origin, None);
+}
+
+#[test]
+fn a_run_with_passengers_aboard_pays_for_itself() {
+    let mut harness = Harness::new("a_run_with_passengers_aboard_pays_for_itself");
+    hurry_up(&mut harness);
+    harness.stop_traffic();
+    let opening = harness.balance();
+    assert_eq!(opening, yafa_core::Treasury::OPENING_BALANCE);
+
+    // Seed the platforms by hand rather than waiting on the generator: this
+    // test is about the money, not about who turns up.
+    {
+        let mut queues = harness.app.world_mut().resource_mut::<Queues>();
+        for _ in 0..12 {
+            queues.at_mut(CityId::Yafa).join(Passenger { destination: CityId::AlQuds });
+        }
+        for _ in 0..6 {
+            queues.at_mut(CityId::Yafa).join(Passenger { destination: CityId::AlLadd });
+        }
+        // Bound somewhere this train does not go, so they stay put.
+        for _ in 0..3 {
+            queues.at_mut(CityId::Yafa).join(Passenger { destination: CityId::Haifa });
+        }
+    }
+
+    harness.travel(CityId::Yafa, CityId::AlQuds);
+
+    // 18 fares collected against 43 piastres of coal on an 86 km run.
+    assert!(
+        harness.balance() > opening,
+        "the run should turn a profit: {} -> {}",
+        opening,
+        harness.balance()
+    );
+
+    let queues = harness.app.world().resource::<Queues>();
+    assert_eq!(
+        queues.at(CityId::Yafa).len(),
+        3,
+        "only those going the train's way should have boarded"
+    );
+}
+
+#[test]
+fn a_line_can_be_bought_and_stays_bought() {
+    let mut harness = Harness::new("a_line_can_be_bought_and_stays_bought");
+    harness.set_year(1918);
+
+    // Yafa to Qaisariya is 55 km of surveyed line: 550 piastres.
+    let segment = {
+        let rail = harness.app.world().resource::<Rail>();
+        rail.projected()
+            .find(|s| (s.from, s.to) == (CityId::Qaisariya, CityId::Yafa))
+            .expect("the coastal line is still on paper")
+            .id
+    };
+
+    harness.credit(1_000);
+    let before = harness.balance();
+    harness.request(UiAction::OpenLine(segment));
+    harness.tick(1.0 / 60.0);
+
+    assert_eq!(harness.balance(), before - 550, "the line should cost ten a kilometre");
+
+    let rail = harness.app.world().resource::<Rail>();
+    assert!(rail.is_open(segment, 1918), "and carry traffic from the year it was laid");
+    assert!(rail.station_is_open(CityId::Qaisariya, 1918));
+}
+
+#[test]
+fn a_line_the_railway_cannot_afford_is_refused() {
+    let mut harness = Harness::new("a_line_the_railway_cannot_afford_is_refused");
+    harness.set_year(1918);
+
+    // The longest line still on paper, which the opening balance cannot reach.
+    // Several of the shorter ones it can, so the test has to name this one.
+    let (segment, cost) = {
+        let rail = harness.app.world().resource::<Rail>();
+        let tariff = harness.app.world().resource::<Counting>().tariff;
+        let longest =
+            rail.projected().max_by_key(|s| s.track_m).expect("something is still on paper");
+        (longest.id, tariff.track(longest.track_m))
+    };
+    let before = harness.balance();
+    assert!(cost > before, "this test needs a line the railway cannot afford");
+
+    harness.request(UiAction::OpenLine(segment));
+    harness.tick(1.0 / 60.0);
+
+    assert_eq!(harness.balance(), before, "a refused purchase must not move the balance");
+    let rail = harness.app.world().resource::<Rail>();
+    assert!(!rail.is_open(segment, 1918));
 }

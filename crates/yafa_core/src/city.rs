@@ -239,6 +239,12 @@ pub struct City {
     pub historical_fact: &'static str,
     /// Where the name is set from the marker.
     pub label: Label,
+    /// How much traffic the place draws, 1 to 5.
+    ///
+    /// It decides both how often a station produces a traveller and how often
+    /// it is where one is going, so the great ports and Al-Quds carry the
+    /// network and the small halts on the southern line barely register.
+    pub importance: u8,
 }
 
 /// The station table. Index `i` always holds `CityId::ALL[i]`.
@@ -253,6 +259,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "A walled Mediterranean port whose sea ramparts turned back Napoleon's \
                           siege of 1799. A branch line reached it from Haifa in 1913.",
         label: Label::new(LabelSide::Left),
+        importance: 3,
     },
     City {
         id: CityId::Haifa,
@@ -264,6 +271,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "Western terminus of the Jezreel Valley Railway, opened in 1905 to carry \
                           the Mediterranean trade inland to the Hejaz main line at Dera'a.",
         label: Label::new(LabelSide::Left),
+        importance: 5,
     },
     City {
         id: CityId::Safad,
@@ -275,6 +283,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "A hill town of Upper Galilee some 900 metres above the sea, long a \
                           centre of scholarship, printing and the copying of manuscripts.",
         label: Label::new(LabelSide::Right),
+        importance: 2,
     },
     City {
         id: CityId::Beisan,
@@ -286,6 +295,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "Set in the Jordan Valley well below sea level; its stop on the Jezreel \
                           Valley line was among the lowest-lying railway stations on earth.",
         label: Label::new(LabelSide::Right),
+        importance: 2,
     },
     City {
         id: CityId::Tulkarm,
@@ -297,6 +307,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "Where the coastal main line met the branch that climbed east into the \
                           highlands towards Nablus, laid during the First World War.",
         label: Label::new(LabelSide::Right),
+        importance: 2,
     },
     City {
         id: CityId::Nablus,
@@ -308,6 +319,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "Seated between Mount Ebal and Mount Gerizim, famed for its olive-oil \
                           soap, its kunafa, and the spring markets of the central highlands.",
         label: Label::new(LabelSide::Right),
+        importance: 4,
     },
     City {
         id: CityId::Yafa,
@@ -319,6 +331,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "The Bride of the Sea. Its Shamouti oranges sailed from these quays, and \
                           in 1892 the country's first railway ran from here up to Al-Quds.",
         label: Label::new(LabelSide::Left),
+        importance: 5,
     },
     City {
         id: CityId::AlLadd,
@@ -330,6 +343,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "The great junction of the network, where the Yafa-Al-Quds line crossed \
                           the main line running north to Haifa and south to Ghazzah.",
         label: Label::new(LabelSide::Below),
+        importance: 4,
     },
     City {
         id: CityId::AlQuds,
@@ -341,6 +355,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "Terminus of the 1892 line from the coast. Its station stood in the \
                           Baq'a quarter, south-west of the old walled city.",
         label: Label::new(LabelSide::Right),
+        importance: 5,
     },
     City {
         id: CityId::AlKhalil,
@@ -352,6 +367,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "A hill town of vineyards and glassblowers. Wartime construction pushed \
                           rails south from Al-Quds through its district in 1915.",
         label: Label::new(LabelSide::Left),
+        importance: 3,
     },
     City {
         id: CityId::Ghazzah,
@@ -363,6 +379,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "A caravan city on the Via Maris between Egypt and Syria; the military \
                           railway of 1917 tied it back into the coastal line.",
         label: Label::new(LabelSide::Left),
+        importance: 4,
     },
     City {
         id: CityId::Rafah,
@@ -374,6 +391,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "The last station before Sinai, where the military railway pushed up \
                           from Egypt in 1917 crossed into the country.",
         label: Label::nudged(LabelSide::Left, 0.0, -9.0),
+        importance: 1,
     },
     City {
         id: CityId::KhanYunis,
@@ -385,6 +403,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "Named for the inn that stood on the caravan road, the last halt of any \
                           size between Ghazzah and the desert crossing.",
         label: Label::nudged(LabelSide::Left, 0.0, 9.0),
+        importance: 2,
     },
     City {
         id: CityId::AlMajdal,
@@ -396,6 +415,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "A weaving town whose striped cottons were sold the length of the \
                           coast, set on the main line running south from Al-Ladd.",
         label: Label::new(LabelSide::Left),
+        importance: 2,
     },
     City {
         id: CityId::Isdud,
@@ -407,6 +427,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "One of the five old Philistine cities, standing back from its own \
                           harbour among the dunes of the southern plain.",
         label: Label::new(LabelSide::Left),
+        importance: 2,
     },
     City {
         id: CityId::Yibna,
@@ -418,6 +439,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "A town of the coastal plain that gave the Crusaders their fief of \
                           Ibelin, and the southern line a station below Al-Ladd.",
         label: Label::new(LabelSide::Left),
+        importance: 1,
     },
     City {
         id: CityId::Qaisariya,
@@ -429,6 +451,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "Herod's harbour city, its breakwaters long since drowned. No rail \
                           ever reached it, though every survey of a coastal line drew one.",
         label: Label::new(LabelSide::Left),
+        importance: 1,
     },
     City {
         id: CityId::BaytLahm,
@@ -440,6 +463,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "A hill town of olive wood and mother-of-pearl, reached from Al-Quds \
                           by a line laid in haste in 1915.",
         label: Label::nudged(LabelSide::Right, 0.0, -10.0),
+        importance: 3,
     },
     City {
         id: CityId::Ramallah,
@@ -451,6 +475,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "A highland town of orchards and cool summer air, 900 metres up, \
                           which the railway only ever approached on paper.",
         label: Label::nudged(LabelSide::Right, 0.0, 10.0),
+        importance: 2,
     },
     City {
         id: CityId::Jenin,
@@ -462,6 +487,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "At the mouth of the Jezreel valley, where the branch from the north \
                           turned south for Nablus in 1913.",
         label: Label::new(LabelSide::Right),
+        importance: 2,
     },
     City {
         id: CityId::AlNasira,
@@ -473,6 +499,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "Set in the hills above the Jezreel plain; the valley railway ran \
                           below it from 1904 and the station carried its name.",
         label: Label::new(LabelSide::Right),
+        importance: 3,
     },
     City {
         id: CityId::Tabariya,
@@ -484,6 +511,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "On the shore of the lake, 200 metres below the sea. The rails \
                           stopped a few miles short at Samakh and never reached the town.",
         label: Label::new(LabelSide::Right),
+        importance: 3,
     },
     City {
         id: CityId::BirAlSabi,
@@ -495,6 +523,7 @@ pub(crate) const CITIES: [City; CITY_COUNT] = [
         historical_fact: "Seven wells at the edge of the Naqab, joined to Ghazzah by a \
                           military line in 1915 and the market of the southern tribes.",
         label: Label::new(LabelSide::Below),
+        importance: 3,
     },
 ];
 

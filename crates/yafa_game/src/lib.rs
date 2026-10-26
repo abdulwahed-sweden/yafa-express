@@ -61,6 +61,9 @@ pub struct SimulationPlugin {
     pub passport: Passport,
     /// Where it is written back to.
     pub passport_path: PathBuf,
+    /// Seeds the traffic generator, so a test can lay out the passengers it
+    /// wants and get the same answer every run.
+    pub traffic_seed: u64,
 }
 
 impl SimulationPlugin {
@@ -72,13 +75,25 @@ impl SimulationPlugin {
             warn!("could not read {}: {error}", passport_path.display());
             Passport::default()
         });
-        Self { passport, passport_path }
+        Self { passport, passport_path, traffic_seed: 0x5EED_1892 }
     }
 }
 
 impl Plugin for SimulationPlugin {
     fn build(&self, app: &mut App) {
-        let network = Network::new();
+        let mut network = Network::new();
+        // Lines the player paid for in an earlier sitting are laid again
+        // before anything else looks at the map.
+        for bought in &self.passport.bought_lines {
+            if let Some(segment) = network
+                .segments()
+                .iter()
+                .find(|s| (s.from, s.to) == (bought.from, bought.to))
+                .map(|s| s.id)
+            {
+                network.open_line(segment, bought.year);
+            }
+        }
         let view = map::make_map_view(&network);
 
         app.init_state::<GamePhase>()
@@ -93,12 +108,18 @@ impl Plugin for SimulationPlugin {
             .init_resource::<Focus>()
             .init_resource::<Announcer>()
             .init_resource::<JourneyScratch>()
+            .init_resource::<TrafficTimer>()
+            .insert_resource(Counting { treasury: self.passport.treasury, ..default() })
+            .insert_resource(Queues(yafa_core::Platforms::new(yafa_core::Rng::seeded(
+                self.traffic_seed,
+            ))))
             .add_message::<ActionRequested>()
             .add_message::<TrainReached>()
             .add_message::<TrainDeparted>()
             .add_message::<PassportStamped>()
             .add_message::<JourneyFinished>()
             .add_message::<LineOpened>()
+            .add_message::<Takings>()
             .add_observer(systems::on_control_activated)
             .add_observer(systems::on_station_clicked)
             .add_systems(
@@ -115,10 +136,13 @@ impl Plugin for SimulationPlugin {
                     systems::apply_actions,
                     systems::train_movement_system,
                     systems::passport_stamp_system,
+                    systems::work_the_doors,
+                    systems::fill_platforms,
                     systems::record_completed_journeys,
                     systems::settle_on_arrival,
                     systems::announce,
                     systems::announce_openings,
+                    systems::announce_takings,
                     systems::save_passport,
                 )
                     .chain()
@@ -161,6 +185,7 @@ impl Plugin for PresentationPlugin {
                     ui::refresh_ticket,
                     ui::refresh_board,
                     ui::refresh_city_panel,
+                    ui::refresh_track_list,
                     ui::refresh_passport,
                     ui::flash_new_stamps,
                     // The flash paints over the card colour the refresh just

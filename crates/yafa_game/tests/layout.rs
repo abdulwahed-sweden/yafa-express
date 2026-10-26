@@ -28,6 +28,7 @@ fn headless_with_ui(name: &str) -> App {
             passport_path: std::env::temp_dir()
                 .join("yafa-express-tests")
                 .join(format!("layout-{name}.json")),
+            traffic_seed: 0xC0FFEE,
         })
         // No asset server here, so the built-in face stands in for all three.
         .insert_resource(Fonts::builtin())
@@ -44,6 +45,7 @@ fn headless_with_ui(name: &str) -> App {
                 ui::refresh_ticket,
                 ui::refresh_board,
                 ui::refresh_city_panel,
+                ui::refresh_track_list,
                 ui::refresh_passport,
                 ui::flash_new_stamps,
                 ui::run_stamp_flash,
@@ -179,15 +181,45 @@ fn every_part_of_the_city_panel_is_spawned_and_filled() {
     let parts: Vec<(CityPanelPart, String)> =
         query.iter(app.world()).map(|(part, text)| (*part, text.0.clone())).collect();
 
-    assert_eq!(parts.len(), 5, "one widget per part of the panel");
+    assert_eq!(parts.len(), 4, "one widget per part of the panel");
     for (part, text) in &parts {
         assert!(!text.is_empty(), "{part:?} was left blank");
     }
+}
 
-    let links = parts
-        .iter()
-        .find(|(part, _)| matches!(part, CityPanelPart::Links))
-        .expect("the panel lists the track out of the station");
-    assert!(links.1.contains("Al-Ladd"), "Yafa's only line runs to Al-Ladd: {}", links.1);
-    assert!(links.1.contains("1892"), "and it opened in 1892: {}", links.1);
+#[test]
+fn the_track_list_names_the_lines_out_of_a_station() {
+    let mut app = headless_with_ui("the_track_list_names_the_lines_out_of_a_station");
+    app.world_mut().write_message(ActionRequested(UiAction::ShowCity(CityId::Yafa)));
+    tick(&mut app, 1.0 / 60.0);
+
+    let mut query = app.world_mut().query::<(&CityLinkText, &Text)>();
+    let rows: Vec<String> = query.iter(app.world()).map(|(_, text)| text.0.clone()).collect();
+    assert_eq!(rows.len(), 4, "four rows, enough for the busiest station");
+
+    let filled: Vec<&String> = rows.iter().filter(|line| !line.is_empty()).collect();
+    assert_eq!(filled.len(), 2, "Yafa has two lines: Al-Ladd, and Qaisariya on paper");
+    assert!(
+        filled.iter().any(|line| line.contains("Al-Ladd") && line.contains("1892")),
+        "the line to Al-Ladd opened in 1892: {filled:?}"
+    );
+}
+
+#[test]
+fn a_line_still_on_paper_is_offered_for_sale() {
+    let mut app = headless_with_ui("a_line_still_on_paper_is_offered_for_sale");
+    app.world_mut().write_message(ActionRequested(UiAction::ShowCity(CityId::Yafa)));
+    tick(&mut app, 1.0 / 60.0);
+
+    let mut query = app.world_mut().query::<(&CityLinkBuyLabel, &Text)>();
+    let offers: Vec<String> = query
+        .iter(app.world())
+        .map(|(_, text)| text.0.clone())
+        .filter(|line| !line.is_empty())
+        .collect();
+
+    // Yafa to Qaisariya is 55 km of surveyed line, at ten piastres the km.
+    assert_eq!(offers.len(), 1, "one line out of Yafa is still unbuilt: {offers:?}");
+    assert!(offers[0].contains("550"), "55 km at 10 a km: {}", offers[0]);
+    assert!(offers[0].to_lowercase().contains("lay"), "and says what it does: {}", offers[0]);
 }

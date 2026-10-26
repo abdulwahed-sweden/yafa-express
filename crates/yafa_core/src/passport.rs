@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::calendar::Calendar;
 use crate::city::{CITY_COUNT, CityId, LineType};
+use crate::money::Treasury;
 use crate::network::Network;
 
 /// On-disk format version, so an old save can be recognised rather than
@@ -77,6 +78,23 @@ pub struct Passport {
     /// there was a calendar still reads.
     #[serde(default)]
     pub calendar: Calendar,
+    /// What the railway has in hand.
+    #[serde(default)]
+    pub treasury: Treasury,
+    /// Lines the player paid to lay, by the stations they join.
+    ///
+    /// Stored as a pair of stations rather than a segment index, so that
+    /// reordering the track table never silently rewrites a save.
+    #[serde(default)]
+    pub bought_lines: Vec<BoughtLine>,
+}
+
+/// A surveyed line the player paid to build.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BoughtLine {
+    pub from: CityId,
+    pub to: CityId,
+    pub year: u16,
 }
 
 const fn default_version() -> u32 {
@@ -98,6 +116,8 @@ impl Passport {
             journeys_completed: 0,
             total_track_m: 0,
             calendar: Calendar::new(),
+            treasury: Treasury::new(),
+            bought_lines: Vec::new(),
         }
     }
 

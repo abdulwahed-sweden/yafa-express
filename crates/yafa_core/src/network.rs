@@ -210,6 +210,24 @@ impl Network {
         self.cities.iter().filter(move |c| c.line_type == line)
     }
 
+    /// Lays a surveyed line, bringing it into service this year.
+    ///
+    /// Returns false if the segment was already built - buying a line twice is
+    /// a bug in the caller, not a transaction.
+    pub fn open_line(&mut self, id: SegmentId, year: u16) -> bool {
+        let segment = &mut self.segments[id.0];
+        if segment.opening != Opening::Projected {
+            return false;
+        }
+        segment.opening = Opening::Opened(year);
+        true
+    }
+
+    /// Every stretch still only drawn on paper.
+    pub fn projected(&self) -> impl Iterator<Item = &Segment> {
+        self.segments.iter().filter(|s| s.opening == Opening::Projected)
+    }
+
     /// Whether a stretch of track carries traffic in the given year.
     pub fn is_open(&self, segment: SegmentId, year: u16) -> bool {
         self.segment(segment).opening.is_open(year)
@@ -346,6 +364,21 @@ impl Route {
         self.legs[..self.legs.len() - 1].iter().map(|leg| leg.to)
     }
 
+    /// Track between two stops of this route, in metres.
+    ///
+    /// A passenger pays for the distance they were carried along the train's
+    /// own line, which is not always the shortest way between the two: the
+    /// train goes where its ticket sends it.
+    pub fn distance_between(&self, from: CityId, to: CityId) -> Option<u32> {
+        let stops: Vec<CityId> = self.stops().collect();
+        let start = stops.iter().position(|&stop| stop == from)?;
+        let end = stops.iter().position(|&stop| stop == to)?;
+        if end <= start {
+            return None;
+        }
+        Some(self.legs[start..end].iter().map(|leg| leg.track_m).sum())
+    }
+
     /// Corridors this route touches, in the order it first enters them.
     pub fn lines_used(&self) -> Vec<LineType> {
         let mut used = Vec::new();
@@ -361,6 +394,33 @@ impl Route {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_surveyed_line_can_be_laid_once() {
+        let mut net = Network::new();
+        let id = net.projected().next().expect("some line is still on paper").id;
+        assert!(!net.is_open(id, 1948));
+
+        assert!(net.open_line(id, 1920));
+        assert!(net.is_open(id, 1920));
+        assert!(!net.is_open(id, 1919), "it opened in 1920, not before");
+
+        // And it cannot be bought again.
+        assert!(!net.open_line(id, 1921));
+    }
+
+    #[test]
+    fn laying_a_line_puts_its_stations_on_the_network() {
+        let mut net = Network::new();
+        assert!(!net.station_is_open(CityId::Safad, 1948));
+        let to_safad = net
+            .projected()
+            .find(|s| s.from == CityId::Tabariya && s.to == CityId::Safad)
+            .expect("Tabariya to Safad is surveyed")
+            .id;
+        net.open_line(to_safad, 1920);
+        assert!(net.station_is_open(CityId::Safad, 1920));
+    }
 
     /// By 1918 every line that was ever built is open. Projected track still
     /// is not, and never is until it is paid for.
@@ -465,6 +525,18 @@ mod tests {
             vec![CityId::Haifa, CityId::AlNasira, CityId::Jenin, CityId::Nablus]
         );
         assert_eq!(route.total_m, 90_000);
+    }
+
+    #[test]
+    fn a_fare_is_measured_along_the_train_s_own_line() {
+        let net = Network::new();
+        let route = net.route(CityId::AlLadd, CityId::Rafah, ALL_BUILT).unwrap();
+        // Al-Ladd to Al-Majdal, taken in order: 18 + 16 + 14.
+        assert_eq!(route.distance_between(CityId::AlLadd, CityId::AlMajdal), Some(48_000));
+        // Backwards along the route is not a fare.
+        assert_eq!(route.distance_between(CityId::AlMajdal, CityId::AlLadd), None);
+        // Nor is a station the train does not call at.
+        assert_eq!(route.distance_between(CityId::AlLadd, CityId::Haifa), None);
     }
 
     #[test]
