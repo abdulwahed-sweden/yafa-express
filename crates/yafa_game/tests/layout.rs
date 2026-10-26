@@ -49,6 +49,7 @@ fn headless_with_ui(name: &str) -> App {
                 ui::refresh_passport,
                 ui::flash_new_stamps,
                 ui::run_stamp_flash,
+                ui::run_arrival_card,
             )
                 .chain()
                 .in_set(GameSet::Present),
@@ -222,4 +223,41 @@ fn a_line_still_on_paper_is_offered_for_sale() {
     assert_eq!(offers.len(), 1, "one line out of Yafa is still unbuilt: {offers:?}");
     assert!(offers[0].contains("550"), "55 km at 10 a km: {}", offers[0]);
     assert!(offers[0].to_lowercase().contains("lay"), "and says what it does: {}", offers[0]);
+}
+
+#[test]
+fn the_arrival_card_covers_the_city_card_and_then_goes() {
+    let mut app = headless_with_ui("the_arrival_card_covers_the_city_card_and_then_goes");
+    tick(&mut app, 1.0 / 60.0);
+
+    let shown = |app: &mut App| -> (bool, bool) {
+        let mut arrival = app.world_mut().query_filtered::<&Node, With<ArrivalCard>>();
+        let a = arrival.single(app.world()).expect("one arrival card").display;
+        let mut city = app.world_mut().query_filtered::<&Node, With<CityPanelSheet>>();
+        let c = city.single(app.world()).expect("one city card").display;
+        (a != Display::None, c != Display::None)
+    };
+
+    assert_eq!(shown(&mut app), (false, true), "the city card holds the slot by default");
+
+    app.world_mut().write_message(TrainReached { city: CityId::AlLadd, final_stop: false });
+    tick(&mut app, 1.0 / 60.0);
+    assert_eq!(shown(&mut app), (true, false), "the arrival takes the slot");
+
+    let names: Vec<String> = {
+        let mut query = app.world_mut().query::<(&ArrivalPart, &Text)>();
+        query
+            .iter(app.world())
+            .filter(|(part, _)| matches!(part, ArrivalPart::Arabic))
+            .map(|(_, text)| text.0.clone())
+            .collect()
+    };
+    assert_eq!(names.len(), 1);
+    assert!(!names[0].is_empty(), "the card carries the station's second name");
+
+    // Four seconds later it has gone and the city card is back.
+    for _ in 0..5 {
+        tick(&mut app, 1.0);
+    }
+    assert_eq!(shown(&mut app), (false, true));
 }

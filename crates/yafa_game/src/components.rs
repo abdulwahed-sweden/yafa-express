@@ -225,6 +225,10 @@ pub struct BoardProgressFill;
 #[derive(Component)]
 pub struct BoardAnnouncements;
 
+/// The sheet of the "About the City" panel, hidden while an arrival shows.
+#[derive(Component)]
+pub struct CityPanelSheet;
+
 /// Pieces of the "About the City" panel.
 #[derive(Component, Clone, Copy, Debug)]
 pub enum CityPanelPart {
@@ -391,3 +395,52 @@ pub struct CityLinkBuy(pub usize);
 /// The label on that control.
 #[derive(Component, Clone, Copy)]
 pub struct CityLinkBuyLabel(pub usize);
+
+/// The card that announces an arrival, and slides away again.
+///
+/// It stands in front of the permanent city card for as long as it is on
+/// screen, so the right-hand column always shows exactly one station.
+#[derive(Component)]
+pub struct ArrivalCard {
+    /// Seconds left before it has gone entirely.
+    pub remaining: f32,
+    pub city: Option<CityId>,
+}
+
+impl ArrivalCard {
+    /// How long the whole thing lasts, slide in and out included.
+    pub const DURATION: f32 = 4.0;
+    /// How long the slide at each end takes.
+    pub const SLIDE: f32 = 0.35;
+
+    /// How far off its resting place the card sits, in pixels, with 0 fully
+    /// arrived and positive numbers off to the right.
+    pub fn offset(&self, width: f32) -> f32 {
+        let elapsed = Self::DURATION - self.remaining;
+        let eased = if elapsed < Self::SLIDE {
+            1.0 - elapsed / Self::SLIDE
+        } else if self.remaining < Self::SLIDE {
+            1.0 - self.remaining / Self::SLIDE
+        } else {
+            0.0
+        };
+        // Cubic ease, so it settles rather than stopping dead.
+        width * eased * eased * eased
+    }
+}
+
+impl Default for ArrivalCard {
+    fn default() -> Self {
+        Self { remaining: 0.0, city: None }
+    }
+}
+
+/// Pieces of the arrival card.
+#[derive(Component, Clone, Copy, Debug)]
+pub enum ArrivalPart {
+    /// The romanised name.
+    Name,
+    /// The same name in Arabic script.
+    Arabic,
+    Fact,
+}

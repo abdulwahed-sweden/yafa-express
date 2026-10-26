@@ -494,13 +494,21 @@ fn right_column(root: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) 
         Pickable::IGNORE,
     ))
     .with_children(|column| {
-        city_panel(column, fonts);
+        // The arrival card and the city card share a slot: whichever is
+        // showing, the column names exactly one station.
+        column
+            .spawn((Node { width: Val::Percent(100.0), ..default() }, Pickable::IGNORE))
+            .with_children(|slot| {
+                city_panel(slot, fonts);
+                arrival_card(slot, fonts);
+            });
         passport_panel(column, rail, fonts);
     });
 }
 
 fn city_panel(column: &mut ChildSpawnerCommands, fonts: &Fonts) {
     column.spawn((
+        CityPanelSheet,
         theme::panel_node(),
         theme::panel_chrome(),
         children![
@@ -614,6 +622,59 @@ fn track_list(fonts: &Fonts) -> impl Bundle {
             )
         }))),
     )
+}
+
+/// The card that slides in when the train draws up somewhere.
+///
+/// Laid over the city card rather than beside it, so it covers the panel it
+/// stands in for instead of pushing the passport down the column.
+fn arrival_card(slot: &mut ChildSpawnerCommands, fonts: &Fonts) {
+    slot.spawn((
+        ArrivalCard::default(),
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            right: Val::Px(0.0),
+            top: Val::Px(0.0),
+            display: Display::None,
+            ..theme::panel_node()
+        },
+        // Spelled out rather than `panel_chrome()`, which carries a border
+        // colour of its own: this card wants the arrival green.
+        BackgroundColor(theme::PAPER),
+        BorderColor::all(theme::VISITED),
+        Pickable { should_block_lower: true, is_hoverable: false },
+        children![
+            (
+                Text::new("Arrived"),
+                fonts.data(theme::CAPTION),
+                TextColor(theme::VISITED),
+                Pickable::IGNORE,
+            ),
+            (
+                ArrivalPart::Name,
+                Text::new(""),
+                fonts.sign(theme::DISPLAY),
+                TextColor(theme::INK_HEADER),
+                Pickable::IGNORE,
+            ),
+            (
+                ArrivalPart::Arabic,
+                Text::new(""),
+                fonts.sign(theme::HEADING),
+                TextColor(theme::INK_SOFT),
+                Pickable::IGNORE,
+            ),
+            (
+                ArrivalPart::Fact,
+                Text::new(""),
+                fonts.prose(theme::BODY),
+                TextColor(theme::INK_SOFT),
+                LineHeight::RelativeToFont(1.5),
+                Pickable::IGNORE,
+            ),
+        ],
+    ));
 }
 
 fn passport_panel(column: &mut ChildSpawnerCommands, rail: &Network, fonts: &Fonts) {
@@ -1293,4 +1354,53 @@ pub fn refresh_track_list(
             None => text.0.clear(),
         }
     }
+}
+
+/// Brings up the arrival card when the train draws in, and slides it away
+/// again four seconds later.
+pub fn run_arrival_card(
+    time: Res<Time>,
+    rail: Res<Rail>,
+    mut arrivals: MessageReader<TrainReached>,
+    mut cards: Query<(&mut ArrivalCard, &mut Node, &mut UiTransform)>,
+    mut parts: Query<(&ArrivalPart, &mut Text)>,
+    mut city_cards: Query<&mut Node, (With<CityPanelSheet>, Without<ArrivalCard>)>,
+) {
+    let Ok((mut card, mut node, mut transform)) = cards.single_mut() else { return };
+
+    // The last station reached this frame wins: at the fastest clock the
+    // train can pass two, and the newer one is the one worth reading.
+    if let Some(latest) = arrivals.read().last() {
+        card.remaining = ArrivalCard::DURATION;
+        card.city = Some(latest.city);
+
+        let data = rail.city(latest.city);
+        for (part, mut text) in &mut parts {
+            text.0 = match part {
+                ArrivalPart::Name => match data.exonym {
+                    Some(exonym) => format!("{}  ·  {exonym}", data.name),
+                    None => data.name.to_owned(),
+                },
+                ArrivalPart::Arabic => data.arabic.to_owned(),
+                ArrivalPart::Fact => data.historical_fact.to_owned(),
+            };
+        }
+    }
+
+    if card.remaining <= 0.0 {
+        if node.display != Display::None {
+            node.display = Display::None;
+            if let Ok(mut city) = city_cards.single_mut() {
+                city.display = Display::Flex;
+            }
+        }
+        return;
+    }
+
+    card.remaining = (card.remaining - time.delta_secs()).max(0.0);
+    node.display = Display::Flex;
+    if let Ok(mut city) = city_cards.single_mut() {
+        city.display = Display::None;
+    }
+    transform.translation = Val2::new(Val::Px(card.offset(RIGHT_WIDTH)), Val::Px(0.0));
 }

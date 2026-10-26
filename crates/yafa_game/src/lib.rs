@@ -186,6 +186,7 @@ impl Plugin for PresentationPlugin {
                     ui::refresh_board,
                     ui::refresh_city_panel,
                     ui::refresh_track_list,
+                    ui::run_arrival_card,
                     ui::refresh_passport,
                     ui::flash_new_stamps,
                     // The flash paints over the card colour the refresh just
