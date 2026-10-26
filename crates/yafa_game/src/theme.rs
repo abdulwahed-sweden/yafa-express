@@ -98,6 +98,18 @@ pub fn line_color_dim(line: LineType) -> Color {
     line_color(line).mix(&DESK, 0.62)
 }
 
+// --- The departure board --------------------------------------------------
+//
+// The board's own four colours, which appear nowhere else in the game: a navy
+// band under a yellow stripe, amber dot-matrix type on near-black.
+
+pub const BOARD_BAND: Color = Color::srgb_u8(0x1D, 0x2A, 0x6B);
+pub const BOARD_STRIPE: Color = Color::srgb_u8(0xF2, 0xC2, 0x00);
+pub const BOARD_GROUND: Color = Color::srgb_u8(0x0B, 0x0F, 0x1C);
+pub const BOARD_AMBER: Color = Color::srgb_u8(0xFF, 0xB0, 0x00);
+/// The second departure in each direction, held back from the first.
+pub const BOARD_AMBER_DIM: Color = Color::srgb_u8(0xC9, 0x8C, 0x00);
+
 // --- The season -----------------------------------------------------------
 
 /// Where the year stands, as the map is lit.

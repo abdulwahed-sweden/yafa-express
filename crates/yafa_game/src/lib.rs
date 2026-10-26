@@ -110,6 +110,7 @@ impl Plugin for SimulationPlugin {
             .init_resource::<Announcer>()
             .init_resource::<JourneyScratch>()
             .init_resource::<TrafficTimer>()
+            .init_resource::<DepartureBoard>()
             .init_resource::<strings::Language>()
             .insert_resource(Counting { treasury: self.passport.treasury, ..default() })
             .insert_resource(Queues(yafa_core::Platforms::new(yafa_core::Rng::seeded(
@@ -199,6 +200,8 @@ impl Plugin for PresentationPlugin {
                 (
                     ui::style_controls,
                     ui::refresh_header,
+                    ui::tick_departure_board,
+                    ui::refresh_departure_board,
                     ui::refresh_ticket,
                     ui::refresh_board,
                     ui::refresh_city_panel,

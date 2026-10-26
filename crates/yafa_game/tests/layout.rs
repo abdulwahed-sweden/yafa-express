@@ -44,6 +44,8 @@ fn headless_with_ui(name: &str) -> App {
             Update,
             (
                 ui::style_controls,
+                ui::tick_departure_board,
+                ui::refresh_departure_board,
                 ui::refresh_ticket,
                 ui::refresh_board,
                 ui::refresh_city_panel,
@@ -349,4 +351,64 @@ fn the_camera_is_marked_for_ui_picking() {
         !strict || marked > 0,
         "picking is set to require markers, so some camera must carry UiPickingCamera"
     );
+}
+
+#[test]
+fn the_departure_board_wakes_up_once_a_station_is_written_on_the_ticket() {
+    let mut app =
+        headless_with_ui("the_departure_board_wakes_up_once_a_station_is_written_on_the_ticket");
+    tick(&mut app, 1.0 / 60.0);
+
+    let mut panels = app.world_mut().query_filtered::<&Node, With<DepartureBoardPanel>>();
+    assert_eq!(
+        panels.single(app.world()).expect("one board").display,
+        Display::None,
+        "a blank ticket has no platform to stand on"
+    );
+
+    app.world_mut().write_message(ActionRequested(UiAction::PickCity(CityId::Yafa)));
+    tick(&mut app, 1.0 / 60.0);
+
+    let mut panels = app.world_mut().query_filtered::<&Node, With<DepartureBoardPanel>>();
+    assert_eq!(
+        panels.single(app.world()).expect("one board").display,
+        Display::Flex,
+        "the board lights up with the departure station"
+    );
+
+    let mut rows = app.world_mut().query::<(&DepartureDest, &Text)>();
+    let mut named: Vec<(usize, String)> = rows
+        .iter(app.world())
+        .map(|(DepartureDest(row), text)| (*row, text.0.clone()))
+        .filter(|(_, name)| !name.is_empty())
+        .collect();
+    named.sort();
+    // In 1892 one line is open out of Yafa, so one direction is lit, twice.
+    assert_eq!(named.len(), 2, "one direction, its two next departures: {named:?}");
+    assert!(
+        named.iter().all(|(_, name)| name.contains("Al-Ladd")),
+        "both read the open way out: {named:?}"
+    );
+
+    let mut times = app.world_mut().query::<(&DepartureTime, &Text)>();
+    let shown: Vec<String> = times.iter(app.world()).map(|(_, text)| text.0.clone()).collect();
+    assert!(
+        shown.iter().filter(|line| line.contains("6")).count() >= 1,
+        "the first departure is six minutes out: {shown:?}"
+    );
+}
+
+#[test]
+fn the_board_counts_down_at_the_timetable_speed() {
+    let mut app = headless_with_ui("the_board_counts_down_at_the_timetable_speed");
+    app.world_mut().write_message(ActionRequested(UiAction::PickCity(CityId::Yafa)));
+    tick(&mut app, 1.0 / 60.0);
+
+    let before = app.world().resource::<DepartureBoard>().minutes[0];
+    // One game minute at the opening timetable speed.
+    let a_minute = DepartureBoard::rate(app.world().resource::<Clock>().time_scale);
+    tick(&mut app, a_minute);
+    let after = app.world().resource::<DepartureBoard>().minutes[0];
+
+    assert!((before - after - 1.0).abs() < 0.05, "one minute off the board: {before} -> {after}");
 }

@@ -517,3 +517,63 @@ pub struct StripTerminusBox;
 pub struct StripTerminusName;
 #[derive(Component)]
 pub struct StripTerminusLatin;
+
+/// The platform board at the station the ticket departs from.
+///
+/// Two directions, two departures each, counting down in game minutes. The
+/// rate follows the timetable the player has chosen, which is the point of
+/// the board: it says what Local, Express and Mail actually mean.
+#[derive(Resource)]
+pub struct DepartureBoard {
+    /// Minutes left for each of the four rows.
+    pub minutes: [f32; DepartureBoard::ROWS],
+}
+
+impl DepartureBoard {
+    pub const ROWS: usize = 4;
+    /// Real seconds per game minute at the slowest timetable, as the concept
+    /// demo has it.
+    pub const SECONDS_PER_MINUTE: f32 = 5.0;
+    /// How far behind the first departure the second one runs.
+    const FOLLOWING: f32 = 19.0;
+
+    /// The timetable the board is keeping, in real seconds to the game minute.
+    pub fn rate(time_scale: f32) -> f32 {
+        // Local is the reference; a faster service counts down faster.
+        Self::SECONDS_PER_MINUTE * (240.0 / time_scale.max(1.0))
+    }
+
+    /// Winds the board down, rolling a departure that has gone.
+    pub fn tick(&mut self, minutes: f32) {
+        for row in 0..Self::ROWS {
+            self.minutes[row] -= minutes;
+            if self.minutes[row] <= -1.0 {
+                self.minutes[row] += Self::FOLLOWING + 1.0;
+            }
+        }
+    }
+}
+
+impl Default for DepartureBoard {
+    fn default() -> Self {
+        // The demo's own starting times.
+        Self { minutes: [6.0, 25.0, 7.0, 27.0] }
+    }
+}
+
+/// The board in the ticket panel, hidden until a departure station is set.
+#[derive(Component)]
+pub struct DepartureBoardPanel;
+
+/// One row of the board.
+#[derive(Component, Clone, Copy)]
+pub struct DepartureRow(pub usize);
+/// The line number in its coloured square.
+#[derive(Component, Clone, Copy)]
+pub struct DepartureLine(pub usize);
+/// Where that departure is bound.
+#[derive(Component, Clone, Copy)]
+pub struct DepartureDest(pub usize);
+/// How long until it leaves.
+#[derive(Component, Clone, Copy)]
+pub struct DepartureTime(pub usize);

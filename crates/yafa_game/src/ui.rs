@@ -95,6 +95,7 @@ fn ticket_counter(root: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language
                     LineHeight::RelativeToFont(1.45),
                     Pickable::IGNORE,
                 ));
+                departure_board(panel, fonts, lang);
                 control_row(panel, fonts, lang);
                 keyboard_hints(panel, fonts, lang);
             });
@@ -155,6 +156,98 @@ fn slot_box(
             ),
         ],
     ));
+}
+
+/// The platform board, shown while a departure station is written on the
+/// ticket.
+///
+/// Two directions, two departures each. In the concept they stand side by
+/// side with a clock between them; this column is 318 px wide, so they are
+/// stacked in two pairs and the clock is dropped, which is what the demo's
+/// own narrow layout does.
+fn departure_board(panel: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
+    panel
+        .spawn((
+            DepartureBoardPanel,
+            Node {
+                flex_direction: FlexDirection::Column,
+                display: Display::None,
+                row_gap: Val::Px(4.0),
+                padding: UiRect::axes(Val::Px(10.0), Val::Px(9.0)),
+                border: UiRect::bottom(Val::Px(6.0)),
+                border_radius: BorderRadius::all(Val::Px(6.0)),
+                width: Val::Percent(100.0),
+                ..default()
+            },
+            BackgroundColor(theme::BOARD_BAND),
+            BorderColor::all(theme::BOARD_STRIPE),
+            Pickable::IGNORE,
+            children![(
+                Text::new(lang.say(Phrase::Departures)),
+                fonts.data(theme::CAPTION - 2.0),
+                TextColor(theme::BOARD_STRIPE),
+                Pickable::IGNORE,
+            )],
+        ))
+        .with_children(|board| {
+            for row in 0..DepartureBoard::ROWS {
+                // The first departure in a direction leads; the one behind it
+                // is the same line a step fainter, as on the board itself.
+                let leading = row % 2 == 0;
+                let amber = if leading { theme::BOARD_AMBER } else { theme::BOARD_AMBER_DIM };
+                board.spawn((
+                    DepartureRow(row),
+                    Node {
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        column_gap: Val::Px(8.0),
+                        padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
+                        border_radius: BorderRadius::all(Val::Px(4.0)),
+                        width: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(theme::BOARD_GROUND),
+                    Pickable::IGNORE,
+                    children![
+                        (
+                            DepartureLine(row),
+                            Node {
+                                padding: UiRect::axes(Val::Px(6.0), Val::Px(0.0)),
+                                border_radius: BorderRadius::all(Val::Px(3.0)),
+                                ..default()
+                            },
+                            BackgroundColor(theme::line_color(LineType::Coastal)),
+                            Pickable::IGNORE,
+                            children![(
+                                Text::new(""),
+                                fonts.data_strong(theme::CAPTION - 3.0),
+                                TextColor(Color::WHITE),
+                                Pickable::IGNORE,
+                            )],
+                        ),
+                        (
+                            DepartureDest(row),
+                            Text::new(""),
+                            if leading {
+                                fonts.data_strong(theme::CAPTION)
+                            } else {
+                                fonts.data(theme::CAPTION)
+                            },
+                            TextColor(amber),
+                            Node { flex_grow: 1.0, ..default() },
+                            Pickable::IGNORE,
+                        ),
+                        (
+                            DepartureTime(row),
+                            Text::new(""),
+                            fonts.data(theme::CAPTION),
+                            TextColor(amber),
+                            Pickable::IGNORE,
+                        ),
+                    ],
+                ));
+            }
+        });
 }
 
 fn control_row(panel: &mut ChildSpawnerCommands, fonts: &Fonts, lang: Language) {
@@ -1414,4 +1507,95 @@ pub fn restart_announcements(
         ],
     ));
     announcer.say(lang.say(Phrase::AnnCounterOpen));
+}
+
+/// Winds the departure board down at the chosen timetable speed.
+pub fn tick_departure_board(time: Res<Time>, clock: Res<Clock>, mut board: ResMut<DepartureBoard>) {
+    let seconds_per_minute = DepartureBoard::rate(clock.time_scale);
+    if seconds_per_minute > 0.0 {
+        board.tick(time.delta_secs() / seconds_per_minute);
+    }
+}
+
+/// Fills the board from the station the ticket departs from.
+///
+/// The two directions are the station's first two open neighbours, which on
+/// a through station are the two ways out of it and at a terminus is the one
+/// way there is.
+pub fn refresh_departure_board(
+    rail: Res<Rail>,
+    desk: Res<Desk>,
+    almanac: Res<Almanac>,
+    lang: Res<Language>,
+    board: Res<DepartureBoard>,
+    mut panels: Query<&mut Node, (With<DepartureBoardPanel>, Without<DepartureRow>)>,
+    mut rows: Query<(&DepartureRow, &mut Node), Without<DepartureBoardPanel>>,
+    mut squares: Query<(&DepartureLine, &mut BackgroundColor)>,
+    mut numbers: Query<(&ChildOf, &mut Text), (Without<DepartureDest>, Without<DepartureTime>)>,
+    mut dests: Query<(&DepartureDest, &mut Text), Without<DepartureTime>>,
+    mut times: Query<(&DepartureTime, &mut Text)>,
+    lines: Query<(Entity, &DepartureLine)>,
+) {
+    let year = almanac.year();
+    let heading: Vec<(CityId, LineType)> = desk
+        .origin
+        .map(|origin| {
+            rail.links(origin)
+                .iter()
+                .filter(|link| rail.is_open(link.segment, year))
+                .map(|link| (link.to, rail.segment(link.segment).line))
+                .take(2)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if let Ok(mut node) = panels.single_mut() {
+        node.display = if desk.origin.is_some() { Display::Flex } else { Display::None };
+    }
+
+    for (DepartureRow(row), mut node) in &mut rows {
+        // Rows 0 and 1 are the first direction, 2 and 3 the second.
+        node.display = if heading.len() > row / 2 { Display::Flex } else { Display::None };
+    }
+    for (DepartureLine(row), mut colour) in &mut squares {
+        if let Some((_, line)) = heading.get(row / 2) {
+            colour.0 =
+                if row % 2 == 0 { theme::line_color(*line) } else { theme::line_color_dim(*line) };
+        }
+    }
+    for (parent, mut text) in &mut numbers {
+        if let Ok((_, DepartureLine(row))) = lines.get(parent.parent()) {
+            text.0 = heading
+                .get(row / 2)
+                .map(|(_, line)| line_number(*line).to_owned())
+                .unwrap_or_default();
+        }
+    }
+    for (DepartureDest(row), mut text) in &mut dests {
+        text.0 = heading
+            .get(row / 2)
+            .map(|(city, _)| station_name(*lang, rail.city(*city)).to_owned())
+            .unwrap_or_default();
+    }
+    for (DepartureTime(row), mut text) in &mut times {
+        text.0 = if heading.len() > row / 2 {
+            let left = board.minutes[*row];
+            if left < 0.5 {
+                lang.say(Phrase::DepartingNow).to_owned()
+            } else {
+                fill(lang.say(Phrase::Minutes), &[&format!("{:.0}", left)])
+            }
+        } else {
+            lang.say(Phrase::NoDeparture).to_owned()
+        };
+    }
+}
+
+/// The number a line carries on the map and the board.
+fn line_number(line: LineType) -> &'static str {
+    match line {
+        LineType::Coastal => "1",
+        LineType::Mountain => "2",
+        LineType::Junction => "·",
+    }
 }

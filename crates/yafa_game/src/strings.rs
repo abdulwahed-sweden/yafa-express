@@ -82,6 +82,10 @@ pub enum Phrase {
     Clear,
     SelectDeparture,
     NoLine,
+    Departures,
+    Minutes,
+    DepartingNow,
+    NoDeparture,
     FromSelectDestination,
     TicketPair,
     NoOpenLine,
@@ -159,7 +163,7 @@ impl Phrase {
     /// Kept beside the table so the tests can sweep the lot. A new variant
     /// that is not added here is still caught by the compiler, which will
     /// reject `both` for not covering it.
-    pub const ALL: [Phrase; 69] = {
+    pub const ALL: [Phrase; 73] = {
         use Phrase::*;
         [
             TicketCounter,
@@ -170,6 +174,10 @@ impl Phrase {
             Clear,
             SelectDeparture,
             NoLine,
+            Departures,
+            Minutes,
+            DepartingNow,
+            NoDeparture,
             FromSelectDestination,
             TicketPair,
             NoOpenLine,
@@ -248,6 +256,10 @@ impl Phrase {
             Clear => ("Clear", "مسح"),
             SelectDeparture => ("Select a departure station", "اختر محطة الانطلاق"),
             NoLine => ("no line", "لا خط"),
+            Departures => ("Departures", "المغادرات"),
+            Minutes => ("{} min", "{} د"),
+            DepartingNow => ("now", "الآن"),
+            NoDeparture => ("no service", "لا خدمة"),
             FromSelectDestination => ("From {} - select a destination", "من {} - اختر محطة الوصول"),
             TicketPair => ("{} to {}", "{} إلى {}"),
             NoOpenLine => {
